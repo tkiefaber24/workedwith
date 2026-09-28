@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workedwith — Your client work is your strongest credential</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <header class="site-header">
+    <button id="logo-btn" class="logo-btn" type="button">
+      <span class="logo-ring"><span class="logo-dot"></span></span>
+      <span class="wordmark">Workedwith</span>
+    </button>
+    <div class="pill-toggle">
+      <button id="tab-candidate" class="pill-btn" type="button">I'm a professional</button>
+      <button id="tab-recruiter" class="pill-btn" type="button">I'm a recruiter</button>
+    </div>
+  </header>
+
+  <!-- Landing view -->
+  <main id="view-landing" class="view">
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">For people whose work reaches past their employer</p>
+        <h1>Your client work is your strongest credential.</h1>
+        <p class="lede">Professionals who deliver reports, analysis, and projects to other companies are often proven talent those companies never see. Workedwith allows verified recruiters to connect you with organizations you already support.</p>
+      </div>
+      <div class="hero-art">
+        <div class="shape shape-circle"></div>
+        <div class="shape shape-square"></div>
+        <div class="shape shape-ring"></div>
+        <div class="dot-grid">
+          <span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span>
+        </div>
+        <div class="sample-card">
+          <div class="sample-card-top">
+            <span class="avatar avatar-blue">MO</span>
+            <div class="sample-card-name">
+              <span class="name-serif">Maya Okafor</span>
+              <span class="sub">Senior Payments Analyst at <strong>Visa</strong></span>
+            </div>
+          </div>
+          <div class="works-with-block">
+            <span class="label-caps">Works with</span>
+            <div class="works-with-box">
+              <span class="works-with-title">Stripe <span class="works-with-you">· your company</span></span>
+            </div>
+            <div class="bar-row"><span class="bar"></span><span class="bar"></span></div>
+          </div>
+        </div>
+        <div class="toast">
+          <span class="toast-dot"></span>Stripe recruiter wants to connect
+        </div>
+      </div>
+    </section>
+
+    <section class="company-strip">
+      <span class="strip-label">Professionals on Workedwith support teams at companies like</span>
+      <div class="badges">
+        <span class="badge badge-bold">Stripe</span>
+        <span class="badge badge-serif">Shopify</span>
+        <span class="badge badge-caps">Delta</span>
+        <span class="badge badge-italic">Nike</span>
+        <span class="badge badge-serif">Visa</span>
+        <span class="badge badge-medium">Deloitte</span>
+      </div>
+    </section>
+
+    <section class="role-cards">
+      <button id="card-candidate" class="role-card role-card-light" type="button">
+        <span class="role-kicker">Professional</span>
+        <span class="role-title">Build your profile</span>
+        <span class="role-desc">Add your role and the clients you report to. Your list stays private.</span>
+        <span class="role-cta">Start →</span>
+      </button>
+      <button id="card-recruiter" class="role-card role-card-dark" type="button">
+        <span class="role-kicker">Recruiter</span>
+        <span class="role-title">Find people who know your company</span>
+        <span class="role-desc">Verify with your work email to see people who already do work for you.</span>
+        <span class="role-cta role-cta-dark">Verify →</span>
+      </button>
+    </section>
+
+    <section class="privacy-section">
+      <div class="privacy-art">
+        <div class="shape shape-rounded"></div>
+        <div class="shape shape-circle-small"></div>
+        <div class="mini-list-card">
+          <div class="mini-list-header">
+            <span class="name-serif mini-list-title">Works with Stripe</span>
+            <span class="verified-pill"><span class="verified-dot"></span>Verified</span>
+          </div>
+          <div class="mini-row mini-row-active">
+            <span class="avatar avatar-neutral">MO</span>
+            <span class="mini-person"><span class="mini-name">Maya Okafor</span><span class="mini-sub">Payments Analyst · Visa</span></span>
+          </div>
+          <div class="mini-row">
+            <span class="avatar avatar-neutral">PN</span>
+            <span class="mini-person"><span class="mini-name">Priya Natarajan</span><span class="mini-sub">Solutions Architect · Snowflake</span></span>
+          </div>
+          <div class="mini-row">
+            <span class="avatar avatar-neutral">SW</span>
+            <span class="mini-person"><span class="mini-name">Sam Whitfield</span><span class="mini-sub">Research Analyst · Gartner</span></span>
+          </div>
+        </div>
+      </div>
+      <div class="privacy-copy">
+        <h2>Recruiters find you. Your client list stays private.</h2>
+        <p>A recruiter from Stripe only sees that you work with Stripe. They never see your other clients.</p>
+      </div>
+    </section>
+
+    <section class="how-it-works">
+      <div class="step">
+        <span class="step-num">1</span>
+        <span class="step-title">You list your work</span>
+        <span class="step-desc">Your employer, a general description of your role, and the companies you currently work with.</span>
+      </div>
+      <div class="step">
+        <span class="step-num">2</span>
+        <span class="step-title">Recruiters verify</span>
+        <span class="step-desc">Only recruiters with a confirmed company email can view profiles.</span>
+      </div>
+      <div class="step">
+        <span class="step-num">3</span>
+        <span class="step-title">Each company sees itself</span>
+        <span class="step-desc">A recruiter from a listed company sees their company on your list. The rest stays hidden.</span>
+      </div>
+    </section>
+  </main>
+
+  <!-- Candidate view -->
+  <main id="view-candidate" class="view">
+    <div id="candidate-gate" class="gate-layout" hidden>
+      <div class="verify-col">
+        <div id="candidate-stage-email" class="verify-stage">
+          <h2>Build your profile</h2>
+          <p class="verify-desc">Enter your email to create or sign back into your private profile. Recruiters can only find you if you list their company.</p>
+          <label class="field">Email<input id="cand-email" type="text" placeholder="you@example.com"></label>
+          <span id="cand-email-error" class="email-error" hidden></span>
+          <button id="cand-verify-btn" class="btn-dark-pill btn-wide" type="button">Send verification code</button>
+        </div>
+        <div id="candidate-stage-code" class="verify-stage" hidden>
+          <h2>Enter your verification code</h2>
+          <p class="verify-desc">We sent a 6-digit code to <strong id="cand-code-stage-email"></strong>.</p>
+          <div id="cand-dev-code-banner" class="dev-code-banner" hidden></div>
+          <label class="field">Verification code<input id="cand-code" type="text" inputmode="numeric" maxlength="6" placeholder="123456"></label>
+          <span id="cand-code-error" class="email-error" hidden></span>
+          <button id="cand-verify-code-btn" class="btn-dark-pill btn-wide" type="button">Verify code</button>
+          <button id="cand-back-to-email-btn" class="link-btn" type="button">Use a different email</button>
+        </div>
+      </div>
+      <div class="hero-art">
+        <div class="shape shape-circle"></div>
+        <div class="shape shape-square"></div>
+        <div class="shape shape-ring"></div>
+        <div class="dot-grid">
+          <span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span>
+        </div>
+        <div class="sample-card">
+          <div class="sample-card-top">
+            <span class="avatar avatar-blue">MO</span>
+            <div class="sample-card-name">
+              <span class="name-serif">Maya Okafor</span>
+              <span class="sub">Senior Payments Analyst at <strong>Visa</strong></span>
+            </div>
+          </div>
+          <div class="works-with-block">
+            <span class="label-caps">Works with</span>
+            <div class="works-with-box">
+              <span class="works-with-title">Stripe <span class="works-with-you">· your company</span></span>
+            </div>
+            <div class="bar-row"><span class="bar"></span><span class="bar"></span></div>
+          </div>
+        </div>
+        <div class="toast">
+          <span class="toast-dot"></span>Stripe recruiter wants to connect
+        </div>
+      </div>
+    </div>
+
+    <div id="candidate-content" hidden>
+    <div class="candidate-grid">
+      <section class="candidate-form">
+        <div class="results-head">
+          <div>
+            <h2>Your profile</h2>
+            <p class="muted-sub">Visible only to verified recruiters from companies on your list.</p>
+          </div>
+          <div class="results-status">
+            <span id="candidate-signed-in-as" class="signed-in-as"></span>
+            <button id="candidate-sign-out-btn" class="link-btn" type="button">Sign out</button>
+          </div>
+        </div>
+        <div class="field-row">
+          <label class="field">Name<input id="me-name" type="text"></label>
+          <label class="field">Employer<input id="me-employer" type="text"></label>
+        </div>
+        <label class="field">Title<input id="me-title" type="text"></label>
+        <label class="field">What you do, in general terms<textarea id="me-desc" rows="4"></textarea></label>
+
+        <div class="client-card">
+          <div class="client-card-header">
+            <span class="client-card-title">Companies you work with</span>
+            <span class="private-indicator"><span class="private-dot"></span>Private list</span>
+          </div>
+          <div id="client-rows"></div>
+          <div class="client-add-row">
+            <input id="new-co" class="client-add-input" type="text" placeholder="Company">
+            <button id="add-client-btn" class="btn-dark-pill" type="button">Add company</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="preview-col">
+        <div class="preview-chips-wrap">
+          <span class="label-caps">Preview as a recruiter from</span>
+          <div id="preview-chips" class="preview-chips"></div>
+        </div>
+        <div id="preview-area"></div>
+      </section>
+    </div>
+    </div>
+  </main>
+
+  <!-- Recruiter: verify -->
+  <main id="view-recruiter-unverified" class="view">
+    <div class="gate-layout">
+      <div class="verify-col">
+        <div id="verify-stage-email" class="verify-stage">
+          <h2>Verify you recruit for your company</h2>
+          <p class="verify-desc">Use your work email. You'll see people who list your company, and only your company, on their profile.</p>
+          <label class="field">Work email<input id="rec-email" type="text" placeholder="you@company.com"></label>
+          <span id="email-error" class="email-error" hidden></span>
+          <button id="verify-btn" class="btn-dark-pill btn-wide" type="button">Send verification code</button>
+          <div class="demo-accounts">
+            <span>Demo accounts:</span>
+            <div id="demo-emails" class="demo-emails"></div>
+          </div>
+        </div>
+        <div id="verify-stage-code" class="verify-stage" hidden>
+          <h2>Enter your verification code</h2>
+          <p class="verify-desc">We sent a 6-digit code to <strong id="code-stage-email"></strong>.</p>
+          <div id="dev-code-banner" class="dev-code-banner" hidden></div>
+          <label class="field">Verification code<input id="rec-code" type="text" inputmode="numeric" maxlength="6" placeholder="123456"></label>
+          <span id="code-error" class="email-error" hidden></span>
+          <button id="verify-code-btn" class="btn-dark-pill btn-wide" type="button">Verify code</button>
+          <button id="back-to-email-btn" class="link-btn" type="button">Use a different email</button>
+        </div>
+      </div>
+      <div class="privacy-art">
+        <div class="shape shape-rounded"></div>
+        <div class="shape shape-circle-small"></div>
+        <div class="mini-list-card">
+          <div class="mini-list-header">
+            <span class="name-serif mini-list-title">Works with Stripe</span>
+            <span class="verified-pill"><span class="verified-dot"></span>Verified</span>
+          </div>
+          <div class="mini-row mini-row-active">
+            <span class="avatar avatar-neutral">MO</span>
+            <span class="mini-person"><span class="mini-name">Maya Okafor</span><span class="mini-sub">Payments Analyst · Visa</span></span>
+          </div>
+          <div class="mini-row">
+            <span class="avatar avatar-neutral">PN</span>
+            <span class="mini-person"><span class="mini-name">Priya Natarajan</span><span class="mini-sub">Solutions Architect · Snowflake</span></span>
+          </div>
+          <div class="mini-row">
+            <span class="avatar avatar-neutral">SW</span>
+            <span class="mini-person"><span class="mini-name">Sam Whitfield</span><span class="mini-sub">Research Analyst · Gartner</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Recruiter: results -->
+  <main id="view-recruiter-verified" class="view">
+    <div class="results-head">
+      <div>
+        <h2 id="results-heading">People who work with</h2>
+        <p id="results-count" class="muted-sub"></p>
+      </div>
+      <div class="results-status">
+        <span class="verified-pill"><span class="verified-dot"></span>Verified · <span id="results-email"></span></span>
+        <button id="sign-out-btn" class="link-btn" type="button">Sign out</button>
+      </div>
+    </div>
+    <div class="results-body">
+      <div id="matches-list" class="matches-list"></div>
+      <div id="detail-panel" class="detail-panel"></div>
+    </div>
+  </main>
+
+</div>
+<script src="app.js"></script>
+</body>
+</html>
