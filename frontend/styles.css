@@ -101,6 +101,28 @@ main.view { flex: 1; }
 }
 .verified-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success-dot); }
 
+.account-menu { position: relative; }
+.account-trigger {
+  display: inline-flex; align-items: center; gap: 8px;
+  border: 0; cursor: pointer; font: inherit; color: inherit;
+}
+.account-trigger-plain {
+  padding: 7px 14px; border-radius: 999px;
+  background: var(--subtle-fill); color: var(--body-strong); font-size: 14px;
+}
+.account-chevron { flex: none; opacity: 0.6; }
+.account-dropdown {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 10;
+  min-width: 160px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 6px; box-shadow: var(--shadow-card);
+}
+.account-dropdown-item {
+  display: block; width: 100%; text-align: left;
+  border: 0; background: none; cursor: pointer; font: inherit;
+  padding: 8px 10px; border-radius: 8px; font-size: 14px; color: var(--body-strong);
+}
+.account-dropdown-item:hover { background: var(--subtle-fill); }
+
 /* Landing: hero */
 #view-landing {
   padding: clamp(48px, 9vw, 120px) clamp(20px, 4vw, 48px) 80px;
@@ -253,7 +275,6 @@ main.view { flex: 1; }
 }
 .candidate-form { display: flex; flex-direction: column; gap: 28px; }
 .candidate-form h2 { margin: 0; font-family: 'Instrument Serif', serif; font-weight: 400; font-size: 44px; letter-spacing: -0.01em; }
-.signed-in-as { font-size: 14px; color: var(--muted); }
 
 .field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
 .field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 500; color: var(--body); }
@@ -272,6 +293,14 @@ main.view { flex: 1; }
 .client-card-title { font-weight: 600; }
 .private-indicator { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
 .private-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success-dot); }
+
+.resume-row {
+  padding: 16px 20px; display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+}
+.resume-status { font-size: 14px; color: var(--body); }
+.resume-actions { display: flex; align-items: center; gap: 14px; }
+.resume-error { padding: 0 20px 16px; }
 
 .client-row {
   display: flex; gap: 14px; align-items: flex-start; padding: 16px 20px;
@@ -350,7 +379,6 @@ main.view { flex: 1; }
 #view-recruiter-verified.active { display: flex; }
 .results-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
 .results-head h2 { margin: 0; font-family: 'Instrument Serif', serif; font-weight: 400; font-size: 44px; letter-spacing: -0.01em; }
-.results-status { display: flex; align-items: center; gap: 12px; font-size: 14px; }
 .results-body { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; }
 
 .matches-list { flex: 1 1 300px; display: flex; flex-direction: column; gap: 10px; }

@@ -17,8 +17,15 @@ create table if not exists public.professionals (
     employer text not null default '',
     title text not null default '',
     description text not null default '',
+    resume_path text,
+    resume_filename text,
+    resume_content_type text,
     created_at timestamptz not null default now()
 );
+
+alter table public.professionals add column if not exists resume_path text;
+alter table public.professionals add column if not exists resume_filename text;
+alter table public.professionals add column if not exists resume_content_type text;
 
 create table if not exists public.professional_clients (
     id bigserial primary key,
@@ -29,11 +36,20 @@ create table if not exists public.professional_clients (
 
 -- Deny-by-default: no policies means the public anon/authenticated keys can't
 -- read or write these tables directly. The Flask backend uses the service-role
--- key, which bypasses RLS entirely, so this only blocks the browser from
--- querying these tables straight from the anon key.
+-- key, which bypasses RLS policies, but table-level GRANTs are a separate gate
+-- from RLS -- without these, service_role can't touch the tables at all (this
+-- project has "automatically expose new tables" off, so nothing is granted by
+-- default). anon/authenticated are deliberately left with no grants at all.
 alter table public.recruiters enable row level security;
 alter table public.professionals enable row level security;
 alter table public.professional_clients enable row level security;
+
+grant select, insert, update, delete on public.recruiters to service_role;
+grant select, insert, update, delete on public.professionals to service_role;
+grant select, insert, update, delete on public.professional_clients to service_role;
+grant usage, select on sequence public.recruiters_id_seq to service_role;
+grant usage, select on sequence public.professionals_id_seq to service_role;
+grant usage, select on sequence public.professional_clients_id_seq to service_role;
 
 -- Sample professionals so recruiter search has results before anyone signs up.
 -- user_id/email are left NULL -- these aren't real accounts, just seed data.

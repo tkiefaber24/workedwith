@@ -6,6 +6,7 @@ from flask_cors import CORS
 
 from auth import parse_work_email, get_bearer_token
 from supabase_client import get_supabase
+from storage import ALLOWED_RESUME_MIME, MAX_RESUME_BYTES, upload_resume, signed_resume_url
 import os
 
 load_dotenv()
@@ -115,9 +116,35 @@ def recruiter_matches():
                 "id": p["id"], "name": p["name"], "employer": p["employer"],
                 "title": p["title"], "desc": p["description"],
                 "matchCompany": match_company_by_id[pid],
+                "hasResume": bool(p.get("resume_path")),
             })
 
     return jsonify({"company": company, "matches": matches})
+
+
+@app.route("/api/recruiters/matches/<int:professional_id>/resume-url", methods=["GET"])
+def recruiter_match_resume_url(professional_id):
+    user = get_current_user(request)
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+    sb = get_supabase()
+    rec = sb.table("recruiters").select("*").eq("user_id", user.id).execute().data
+    if not rec:
+        return jsonify({"error": "Not a verified recruiter yet."}), 404
+    company = rec[0]["company"]
+
+    # Only allow this if the professional actually lists the recruiter's company --
+    # same privacy rule as /matches, enforced again here since this is a separate route.
+    match = sb.table("professional_clients").select("professional_id") \
+        .eq("professional_id", professional_id).ilike("company", company.strip()).execute().data
+    if not match:
+        return jsonify({"error": "Not authorized to view this resume."}), 403
+
+    prof = sb.table("professionals").select("resume_path").eq("id", professional_id).execute().data
+    if not prof or not prof[0].get("resume_path"):
+        return jsonify({"error": "No resume uploaded."}), 404
+
+    return jsonify({"url": signed_resume_url(prof[0]["resume_path"])})
 
 
 # ---- Professionals ----
@@ -133,6 +160,8 @@ def professional_json(row):
         "email": row.get("email"), "name": row["name"], "employer": row["employer"],
         "title": row["title"], "desc": row["description"],
         "clients": get_clients(row["id"]),
+        "hasResume": bool(row.get("resume_path")),
+        "resumeFilename": row.get("resume_filename"),
     }
 
 
@@ -212,6 +241,49 @@ def professional_remove_client(client_id):
         .eq("id", client_id).eq("professional_id", row["id"]).execute()
 
     return jsonify(professional_json(row))
+
+
+@app.route("/api/professionals/me/resume", methods=["POST"])
+def professional_upload_resume():
+    user = get_current_user(request)
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+    row = get_or_create_professional(user)
+
+    if "resume" not in request.files:
+        return jsonify({"error": "No resume file provided."}), 400
+    file = request.files["resume"]
+    content_type = file.mimetype
+    if content_type not in ALLOWED_RESUME_MIME:
+        return jsonify({"error": "Resume must be a PDF or Word (.docx) document."}), 400
+
+    file_bytes = file.read()
+    if len(file_bytes) > MAX_RESUME_BYTES:
+        return jsonify({"error": "Resume must be smaller than 10MB."}), 400
+
+    extension = ALLOWED_RESUME_MIME[content_type]
+    path = upload_resume(row["id"], file_bytes, content_type, extension)
+
+    sb = get_supabase()
+    sb.table("professionals").update({
+        "resume_path": path,
+        "resume_filename": file.filename or f"resume.{extension}",
+        "resume_content_type": content_type,
+    }).eq("id", row["id"]).execute()
+    row = sb.table("professionals").select("*").eq("id", row["id"]).single().execute().data
+
+    return jsonify(professional_json(row))
+
+
+@app.route("/api/professionals/me/resume-url", methods=["GET"])
+def professional_resume_url():
+    user = get_current_user(request)
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+    row = get_or_create_professional(user)
+    if not row.get("resume_path"):
+        return jsonify({"error": "No resume uploaded yet."}), 404
+    return jsonify({"url": signed_resume_url(row["resume_path"])})
 
 
 @app.route("/api/health", methods=["GET"])

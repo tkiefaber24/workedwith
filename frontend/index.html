@@ -148,14 +148,11 @@
           <p class="verify-desc">Enter your email to create or sign back into your private profile. Recruiters can only find you if you list their company.</p>
           <label class="field">Email<input id="cand-email" type="text" placeholder="you@example.com"></label>
           <span id="cand-email-error" class="email-error" hidden></span>
-          <button id="cand-verify-btn" class="btn-dark-pill btn-wide" type="button">Send verification code</button>
+          <button id="cand-verify-btn" class="btn-dark-pill btn-wide" type="button">Send sign-in link</button>
         </div>
-        <div id="candidate-stage-code" class="verify-stage" hidden>
-          <h2>Enter your verification code</h2>
-          <p class="verify-desc">We sent a 6-digit code to <strong id="cand-code-stage-email"></strong>.</p>
-          <label class="field">Verification code<input id="cand-code" type="text" inputmode="numeric" maxlength="6" placeholder="123456"></label>
-          <span id="cand-code-error" class="email-error" hidden></span>
-          <button id="cand-verify-code-btn" class="btn-dark-pill btn-wide" type="button">Verify code</button>
+        <div id="candidate-stage-sent" class="verify-stage" hidden>
+          <h2>Check your email</h2>
+          <p class="verify-desc">We sent a sign-in link to <strong id="cand-sent-email"></strong>. Click it to continue — you can come back to this tab afterward.</p>
           <button id="cand-back-to-email-btn" class="link-btn" type="button">Use a different email</button>
         </div>
       </div>
@@ -197,9 +194,14 @@
             <h2>Your profile</h2>
             <p class="muted-sub">Visible only to verified recruiters from companies on your list.</p>
           </div>
-          <div class="results-status">
-            <span id="candidate-signed-in-as" class="signed-in-as"></span>
-            <button id="candidate-sign-out-btn" class="link-btn" type="button">Sign out</button>
+          <div class="account-menu">
+            <button id="candidate-account-trigger" class="account-trigger account-trigger-plain" type="button">
+              <span id="candidate-signed-in-as" class="account-email"></span>
+              <svg class="account-chevron" width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <div id="candidate-account-dropdown" class="account-dropdown" hidden>
+              <button id="candidate-sign-out-btn" class="account-dropdown-item" type="button">Sign out</button>
+            </div>
           </div>
         </div>
         <div class="field-row">
@@ -208,6 +210,22 @@
         </div>
         <label class="field">Title<input id="me-title" type="text"></label>
         <label class="field">What you do, in general terms<textarea id="me-desc" rows="4"></textarea></label>
+
+        <div class="client-card">
+          <div class="client-card-header">
+            <span class="client-card-title">Resume</span>
+            <span class="private-indicator"><span class="private-dot"></span>Only shown to matching recruiters</span>
+          </div>
+          <div class="resume-row">
+            <span id="resume-status" class="resume-status">No resume uploaded yet.</span>
+            <div class="resume-actions">
+              <a id="resume-view-link" class="link-btn" href="#" target="_blank" rel="noopener" hidden>View</a>
+              <input id="resume-file-input" type="file" accept=".pdf,.docx" hidden>
+              <button id="resume-upload-btn" class="btn-dark-pill" type="button">Upload resume</button>
+            </div>
+          </div>
+          <span id="resume-error" class="email-error resume-error" hidden></span>
+        </div>
 
         <div class="client-card">
           <div class="client-card-header">
@@ -242,14 +260,11 @@
           <p class="verify-desc">Use your work email. You'll see people who list your company, and only your company, on their profile.</p>
           <label class="field">Work email<input id="rec-email" type="text" placeholder="you@company.com"></label>
           <span id="email-error" class="email-error" hidden></span>
-          <button id="verify-btn" class="btn-dark-pill btn-wide" type="button">Send verification code</button>
+          <button id="verify-btn" class="btn-dark-pill btn-wide" type="button">Send sign-in link</button>
         </div>
-        <div id="verify-stage-code" class="verify-stage" hidden>
-          <h2>Enter your verification code</h2>
-          <p class="verify-desc">We sent a 6-digit code to <strong id="code-stage-email"></strong>.</p>
-          <label class="field">Verification code<input id="rec-code" type="text" inputmode="numeric" maxlength="6" placeholder="123456"></label>
-          <span id="code-error" class="email-error" hidden></span>
-          <button id="verify-code-btn" class="btn-dark-pill btn-wide" type="button">Verify code</button>
+        <div id="verify-stage-sent" class="verify-stage" hidden>
+          <h2>Check your email</h2>
+          <p class="verify-desc">We sent a sign-in link to <strong id="rec-sent-email"></strong>. Click it to continue — you can come back to this tab afterward.</p>
           <button id="back-to-email-btn" class="link-btn" type="button">Use a different email</button>
         </div>
       </div>
@@ -285,9 +300,14 @@
         <h2 id="results-heading">People who work with</h2>
         <p id="results-count" class="muted-sub"></p>
       </div>
-      <div class="results-status">
-        <span class="verified-pill"><span class="verified-dot"></span>Verified · <span id="results-email"></span></span>
-        <button id="sign-out-btn" class="link-btn" type="button">Sign out</button>
+      <div class="account-menu">
+        <button id="recruiter-account-trigger" class="account-trigger verified-pill" type="button">
+          <span class="verified-dot"></span>Verified · <span id="results-email"></span>
+          <svg class="account-chevron" width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div id="recruiter-account-dropdown" class="account-dropdown" hidden>
+          <button id="sign-out-btn" class="account-dropdown-item" type="button">Sign out</button>
+        </div>
       </div>
     </div>
     <div class="results-body">
