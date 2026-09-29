@@ -1,21 +1,14 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
-from auth import (
-    parse_work_email, parse_any_email, generate_code,
-    issue_token, verify_token,
-    issue_professional_token, verify_professional_token,
-    get_bearer_token,
-)
-from db import get_db, init_db, seed_professionals_if_empty
+from auth import parse_work_email, get_bearer_token
+from supabase_client import get_supabase
 import os
 
 load_dotenv()
-init_db()
-seed_professionals_if_empty()
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
@@ -27,317 +20,198 @@ CORS(app, origins="*")
 def index():
     return app.send_static_file("index.html")
 
-STUB_EMAIL = os.getenv("STUB_EMAIL", "true").lower() == "true"
-CODE_TTL_MINUTES = 10
+
+@app.route("/config.js")
+def config_js():
+    url = os.getenv("SUPABASE_URL", "")
+    anon_key = os.getenv("SUPABASE_ANON_KEY", "")
+    body = f'window.SUPABASE_URL = {url!r};\nwindow.SUPABASE_ANON_KEY = {anon_key!r};\n'
+    return app.response_class(body, mimetype="application/javascript")
 
 
 def now_iso():
     return datetime.now(timezone.utc).isoformat()
 
 
-def send_verification_email(email, code):
-    if STUB_EMAIL:
-        print(f"[dev] verification code for {email}: {code}")
-        return
-    raise NotImplementedError("Real email delivery isn't configured yet.")
-
-
-def issue_code_for(conn, email):
-    code = generate_code()
-    expires_at = (datetime.now(timezone.utc) + timedelta(minutes=CODE_TTL_MINUTES)).isoformat()
-    conn.execute("DELETE FROM verification_codes WHERE email = ? AND consumed_at IS NULL", (email,))
-    conn.execute(
-        "INSERT INTO verification_codes (email, code, expires_at) VALUES (?, ?, ?)",
-        (email, code, expires_at),
-    )
-    conn.commit()
-    send_verification_email(email, code)
-    return code
-
-
-def consume_code(conn, email, code):
-    """Returns True if a matching, unexpired code was found and marked consumed."""
-    row = conn.execute(
-        "SELECT * FROM verification_codes WHERE email = ? AND code = ? AND consumed_at IS NULL "
-        "ORDER BY id DESC LIMIT 1",
-        (email, code),
-    ).fetchone()
-    if not row or row["expires_at"] < now_iso():
-        return False
-    conn.execute("UPDATE verification_codes SET consumed_at = ? WHERE id = ?", (now_iso(), row["id"]))
-    conn.commit()
-    return True
-
-
-# ---- Recruiters ----
-
-def get_current_recruiter(req):
+def get_current_user(req):
     token = get_bearer_token(req)
     if not token:
         return None
-    email = verify_token(token)
-    if not email:
+    try:
+        return get_supabase().auth.get_user(token).user
+    except Exception:
         return None
-    conn = get_db()
-    row = conn.execute("SELECT * FROM recruiters WHERE email = ?", (email,)).fetchone()
-    conn.close()
-    return row
 
+
+# ---- Recruiters ----
 
 def recruiter_json(row):
     return {"email": row["email"], "company": row["company"], "verifiedAt": row["verified_at"]}
 
 
-@app.route("/api/recruiters/request-code", methods=["POST"])
-def recruiter_request_code():
-    body = request.get_json(silent=True) or {}
+@app.route("/api/recruiters/finalize", methods=["POST"])
+def recruiter_finalize():
+    """Called right after the frontend completes Supabase OTP verification.
+    Confirms the verified email is a work email and creates/updates the recruiter row."""
+    user = get_current_user(request)
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
     try:
-        email, domain, company = parse_work_email(body.get("email"))
+        email, domain, company = parse_work_email(user.email)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
-    conn = get_db()
-    code = issue_code_for(conn, email)
-    conn.close()
-
-    response = {"email": email, "company": company}
-    if STUB_EMAIL:
-        response["devCode"] = code
-    return jsonify(response)
-
-
-@app.route("/api/recruiters/verify-code", methods=["POST"])
-def recruiter_verify_code():
-    body = request.get_json(silent=True) or {}
-    email = (body.get("email") or "").strip().lower()
-    code = (body.get("code") or "").strip()
-    if not email or not code:
-        return jsonify({"error": "Enter the code we sent you."}), 400
-
-    conn = get_db()
-    if not consume_code(conn, email, code):
-        conn.close()
-        return jsonify({"error": "That code is incorrect or has expired."}), 400
-
-    try:
-        _, domain, company = parse_work_email(email)
-    except ValueError as e:
-        conn.close()
-        return jsonify({"error": str(e)}), 400
-
-    verified_at = now_iso()
-    conn.execute(
-        "INSERT INTO recruiters (email, domain, company, verified_at) VALUES (?, ?, ?, ?) "
-        "ON CONFLICT(email) DO UPDATE SET domain = excluded.domain, company = excluded.company, "
-        "verified_at = excluded.verified_at",
-        (email, domain, company, verified_at),
-    )
-    conn.commit()
-    recruiter = conn.execute("SELECT * FROM recruiters WHERE email = ?", (email,)).fetchone()
-    conn.close()
-
-    token = issue_token(email)
-    return jsonify({"token": token, **recruiter_json(recruiter)})
+    sb = get_supabase()
+    sb.table("recruiters").upsert({
+        "user_id": user.id, "email": email, "domain": domain,
+        "company": company, "verified_at": now_iso(),
+    }, on_conflict="user_id").execute()
+    row = sb.table("recruiters").select("*").eq("user_id", user.id).single().execute().data
+    return jsonify(recruiter_json(row))
 
 
 @app.route("/api/recruiters/me", methods=["GET"])
 def recruiter_me():
-    recruiter = get_current_recruiter(request)
-    if not recruiter:
+    user = get_current_user(request)
+    if not user:
         return jsonify({"error": "Unauthorized"}), 401
-    return jsonify(recruiter_json(recruiter))
+    result = get_supabase().table("recruiters").select("*").eq("user_id", user.id).execute()
+    if not result.data:
+        return jsonify({"error": "Not a verified recruiter yet."}), 404
+    return jsonify(recruiter_json(result.data[0]))
 
 
 @app.route("/api/recruiters/matches", methods=["GET"])
 def recruiter_matches():
-    recruiter = get_current_recruiter(request)
-    if not recruiter:
+    user = get_current_user(request)
+    if not user:
         return jsonify({"error": "Unauthorized"}), 401
-    company = recruiter["company"]
+    sb = get_supabase()
+    rec = sb.table("recruiters").select("*").eq("user_id", user.id).execute().data
+    if not rec:
+        return jsonify({"error": "Not a verified recruiter yet."}), 404
+    company = rec[0]["company"]
 
-    conn = get_db()
-    rows = conn.execute(
-        "SELECT p.id AS id, p.name AS name, p.employer AS employer, p.title AS title, p.desc AS desc, "
-        "pc.company AS match_company "
-        "FROM professionals p JOIN professional_clients pc ON pc.professional_id = p.id "
-        "WHERE LOWER(TRIM(pc.company)) = LOWER(TRIM(?)) "
-        "ORDER BY p.id",
-        (company,),
-    ).fetchall()
-    conn.close()
+    clients = sb.table("professional_clients").select("professional_id, company") \
+        .ilike("company", company.strip()).execute().data
+
+    match_company_by_id = {}
+    ordered_ids = []
+    for c in clients:
+        pid = c["professional_id"]
+        if pid not in match_company_by_id:
+            match_company_by_id[pid] = c["company"]
+            ordered_ids.append(pid)
 
     matches = []
-    seen_ids = set()
-    for r in rows:
-        if r["id"] in seen_ids:
-            continue
-        seen_ids.add(r["id"])
-        matches.append({
-            "id": r["id"], "name": r["name"], "employer": r["employer"],
-            "title": r["title"], "desc": r["desc"], "matchCompany": r["match_company"],
-        })
+    if ordered_ids:
+        profs = sb.table("professionals").select("*").in_("id", ordered_ids).execute().data
+        by_id = {p["id"]: p for p in profs}
+        for pid in ordered_ids:
+            p = by_id.get(pid)
+            if not p:
+                continue
+            matches.append({
+                "id": p["id"], "name": p["name"], "employer": p["employer"],
+                "title": p["title"], "desc": p["description"],
+                "matchCompany": match_company_by_id[pid],
+            })
+
     return jsonify({"company": company, "matches": matches})
 
 
 # ---- Professionals ----
 
-def get_current_professional(req):
-    token = get_bearer_token(req)
-    if not token:
-        return None
-    email = verify_professional_token(token)
-    if not email:
-        return None
-    conn = get_db()
-    row = conn.execute("SELECT * FROM professionals WHERE email = ?", (email,)).fetchone()
-    conn.close()
-    return row
-
-
-def get_clients(conn, professional_id):
-    rows = conn.execute(
-        "SELECT id, company FROM professional_clients WHERE professional_id = ? ORDER BY sort_order, id",
-        (professional_id,),
-    ).fetchall()
+def get_clients(professional_id):
+    rows = get_supabase().table("professional_clients").select("id, company") \
+        .eq("professional_id", professional_id).order("sort_order").execute().data
     return [{"id": r["id"], "company": r["company"]} for r in rows]
 
 
-def professional_json(conn, row):
+def professional_json(row):
     return {
-        "email": row["email"], "name": row["name"], "employer": row["employer"],
-        "title": row["title"], "desc": row["desc"],
-        "clients": get_clients(conn, row["id"]),
+        "email": row.get("email"), "name": row["name"], "employer": row["employer"],
+        "title": row["title"], "desc": row["description"],
+        "clients": get_clients(row["id"]),
     }
 
 
-@app.route("/api/professionals/request-code", methods=["POST"])
-def professional_request_code():
-    body = request.get_json(silent=True) or {}
-    try:
-        email = parse_any_email(body.get("email"))
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-
-    conn = get_db()
-    code = issue_code_for(conn, email)
-    conn.close()
-
-    response = {"email": email}
-    if STUB_EMAIL:
-        response["devCode"] = code
-    return jsonify(response)
-
-
-@app.route("/api/professionals/verify-code", methods=["POST"])
-def professional_verify_code():
-    body = request.get_json(silent=True) or {}
-    email = (body.get("email") or "").strip().lower()
-    code = (body.get("code") or "").strip()
-    if not email or not code:
-        return jsonify({"error": "Enter the code we sent you."}), 400
-
-    conn = get_db()
-    if not consume_code(conn, email, code):
-        conn.close()
-        return jsonify({"error": "That code is incorrect or has expired."}), 400
-
-    row = conn.execute("SELECT * FROM professionals WHERE email = ?", (email,)).fetchone()
-    if not row:
-        conn.execute(
-            "INSERT INTO professionals (email, name, employer, title, desc, created_at) "
-            "VALUES (?, '', '', '', '', ?)",
-            (email, now_iso()),
-        )
-        conn.commit()
-        row = conn.execute("SELECT * FROM professionals WHERE email = ?", (email,)).fetchone()
-
-    profile = professional_json(conn, row)
-    conn.close()
-
-    token = issue_professional_token(email)
-    return jsonify({"token": token, "profile": profile})
+def get_or_create_professional(user):
+    sb = get_supabase()
+    existing = sb.table("professionals").select("*").eq("user_id", user.id).execute().data
+    if existing:
+        return existing[0]
+    inserted = sb.table("professionals").insert({
+        "user_id": user.id, "email": user.email,
+        "name": "", "employer": "", "title": "", "description": "",
+    }).execute()
+    return inserted.data[0]
 
 
 @app.route("/api/professionals/me", methods=["GET"])
 def professional_me():
-    professional = get_current_professional(request)
-    if not professional:
+    user = get_current_user(request)
+    if not user:
         return jsonify({"error": "Unauthorized"}), 401
-    conn = get_db()
-    profile = professional_json(conn, professional)
-    conn.close()
-    return jsonify(profile)
+    row = get_or_create_professional(user)
+    return jsonify(professional_json(row))
 
 
 @app.route("/api/professionals/me", methods=["PUT"])
 def professional_update():
-    professional = get_current_professional(request)
-    if not professional:
+    user = get_current_user(request)
+    if not user:
         return jsonify({"error": "Unauthorized"}), 401
+    row = get_or_create_professional(user)
+
     body = request.get_json(silent=True) or {}
-
     fields = {}
-    for key in ("name", "employer", "title", "desc"):
+    for key, column in (("name", "name"), ("employer", "employer"), ("title", "title"), ("desc", "description")):
         if key in body:
-            fields[key] = str(body[key])[:2000]
-    if not fields:
-        conn = get_db()
-        profile = professional_json(conn, professional)
-        conn.close()
-        return jsonify(profile)
+            fields[column] = str(body[key])[:2000]
 
-    conn = get_db()
-    conn.execute(
-        "UPDATE professionals SET " + ", ".join(f"{k} = ?" for k in fields) + " WHERE id = ?",
-        (*fields.values(), professional["id"]),
-    )
-    conn.commit()
-    row = conn.execute("SELECT * FROM professionals WHERE id = ?", (professional["id"],)).fetchone()
-    profile = professional_json(conn, row)
-    conn.close()
-    return jsonify(profile)
+    if fields:
+        sb = get_supabase()
+        sb.table("professionals").update(fields).eq("id", row["id"]).execute()
+        row = sb.table("professionals").select("*").eq("id", row["id"]).single().execute().data
+
+    return jsonify(professional_json(row))
 
 
 @app.route("/api/professionals/me/clients", methods=["POST"])
 def professional_add_client():
-    professional = get_current_professional(request)
-    if not professional:
+    user = get_current_user(request)
+    if not user:
         return jsonify({"error": "Unauthorized"}), 401
+    row = get_or_create_professional(user)
+
     body = request.get_json(silent=True) or {}
     company = (body.get("company") or "").strip()
     if not company:
         return jsonify({"error": "Company name is required."}), 400
 
-    conn = get_db()
-    next_order = conn.execute(
-        "SELECT COALESCE(MAX(sort_order), -1) + 1 AS n FROM professional_clients WHERE professional_id = ?",
-        (professional["id"],),
-    ).fetchone()["n"]
-    conn.execute(
-        "INSERT INTO professional_clients (professional_id, company, sort_order) VALUES (?, ?, ?)",
-        (professional["id"], company, next_order),
-    )
-    conn.commit()
-    profile = professional_json(conn, professional)
-    conn.close()
-    return jsonify(profile)
+    sb = get_supabase()
+    existing = sb.table("professional_clients").select("sort_order") \
+        .eq("professional_id", row["id"]).order("sort_order", desc=True).limit(1).execute().data
+    next_order = (existing[0]["sort_order"] + 1) if existing else 0
+    sb.table("professional_clients").insert({
+        "professional_id": row["id"], "company": company, "sort_order": next_order,
+    }).execute()
+
+    return jsonify(professional_json(row))
 
 
 @app.route("/api/professionals/me/clients/<int:client_id>", methods=["DELETE"])
 def professional_remove_client(client_id):
-    professional = get_current_professional(request)
-    if not professional:
+    user = get_current_user(request)
+    if not user:
         return jsonify({"error": "Unauthorized"}), 401
+    row = get_or_create_professional(user)
 
-    conn = get_db()
-    conn.execute(
-        "DELETE FROM professional_clients WHERE id = ? AND professional_id = ?",
-        (client_id, professional["id"]),
-    )
-    conn.commit()
-    profile = professional_json(conn, professional)
-    conn.close()
-    return jsonify(profile)
+    get_supabase().table("professional_clients").delete() \
+        .eq("id", client_id).eq("professional_id", row["id"]).execute()
+
+    return jsonify(professional_json(row))
 
 
 @app.route("/api/health", methods=["GET"])

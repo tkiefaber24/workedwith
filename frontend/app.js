@@ -2,9 +2,7 @@
   'use strict';
 
   var API_BASE = '';
-  var RECRUITER_TOKEN_KEY = 'workedwith_recruiter_token';
-  var PROFESSIONAL_TOKEN_KEY = 'workedwith_professional_token';
-  var DOMAINS = { 'stripe.com': 'Stripe', 'shopify.com': 'Shopify', 'delta.com': 'Delta', 'nike.com': 'Nike' };
+  var sb = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 
   function initials(n) {
     return (n || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(function (w) { return w[0].toUpperCase(); }).join('');
@@ -36,16 +34,17 @@
     return res.json().then(function (data) { return { ok: res.ok, data: data }; });
   }
 
-  function profAuthHeaders(extra) {
-    var token = localStorage.getItem(PROFESSIONAL_TOKEN_KEY);
+  function authHeaders(extra) {
     var headers = Object.assign({}, extra || {});
-    if (token) headers.Authorization = 'Bearer ' + token;
+    if (state.sbToken) headers.Authorization = 'Bearer ' + state.sbToken;
     return headers;
   }
 
   var state = {
     view: 'landing',
     me: { name: '', employer: '', title: '', desc: '', clients: [] },
+    sbToken: null, sbEmail: null,
+    recruiterChecked: false, professionalLoaded: false,
     candidateLoggedIn: false, candidateStage: 'email', candidateEmail: '', candidatePendingEmail: '',
     newCo: '', previewIdx: 0,
     email: '', recStage: 'email', pendingEmail: '',
@@ -57,15 +56,15 @@
     'view-landing', 'view-candidate', 'view-recruiter-unverified', 'view-recruiter-verified',
     'candidate-gate', 'candidate-content', 'candidate-stage-email', 'candidate-stage-code',
     'cand-email', 'cand-email-error', 'cand-verify-btn',
-    'cand-code-stage-email', 'cand-dev-code-banner', 'cand-code', 'cand-code-error',
+    'cand-code-stage-email', 'cand-code', 'cand-code-error',
     'cand-verify-code-btn', 'cand-back-to-email-btn',
     'candidate-signed-in-as', 'candidate-sign-out-btn',
     'me-name', 'me-employer', 'me-title', 'me-desc',
     'client-rows', 'new-co', 'add-client-btn',
     'preview-chips', 'preview-area',
     'verify-stage-email', 'verify-stage-code',
-    'rec-email', 'email-error', 'verify-btn', 'demo-emails',
-    'code-stage-email', 'dev-code-banner', 'rec-code', 'code-error', 'verify-code-btn', 'back-to-email-btn',
+    'rec-email', 'email-error', 'verify-btn',
+    'code-stage-email', 'rec-code', 'code-error', 'verify-code-btn', 'back-to-email-btn',
     'results-heading', 'results-count', 'results-email', 'sign-out-btn',
     'matches-list', 'detail-panel'
   ].forEach(function (id) { el[id.replace(/-([a-z])/g, function (_, c) { return c.toUpperCase(); })] = document.getElementById(id); });
@@ -94,6 +93,14 @@
     el.verifyStageEmail.hidden = state.recStage !== 'email';
     el.verifyStageCode.hidden = state.recStage !== 'code';
 
+    if (state.view === 'candidate' && state.sbToken && !state.candidateLoggedIn && !state.professionalLoaded) {
+      state.professionalLoaded = true;
+      loadProfessionalProfile();
+    }
+    if (state.view === 'recruiter' && state.sbToken && !state.recCompany && !state.recruiterChecked) {
+      state.recruiterChecked = true;
+      loadOrFinalizeRecruiter();
+    }
     if (recruiterVerified) loadAndRenderResults();
   }
 
@@ -171,12 +178,24 @@
     renderPreviewArea();
   }
 
+  function loadProfessionalProfile() {
+    apiFetch('/api/professionals/me', { headers: authHeaders() })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (data) {
+        if (!data) return;
+        state.candidateLoggedIn = true;
+        applyProfile(data);
+        renderShell();
+      })
+      .catch(function (err) { console.error(err); });
+  }
+
   function updateProfileField(field, value) {
     var body = {};
     body[field] = value;
     apiFetch('/api/professionals/me', {
       method: 'PUT',
-      headers: profAuthHeaders({ 'Content-Type': 'application/json' }),
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(body)
     }).catch(function (err) { console.error(err); });
   }
@@ -187,7 +206,7 @@
     el.addClientBtn.disabled = true;
     apiFetch('/api/professionals/me/clients', {
       method: 'POST',
-      headers: profAuthHeaders({ 'Content-Type': 'application/json' }),
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ company: company })
     })
       .then(parseJson)
@@ -205,7 +224,7 @@
   function removeClient(clientId) {
     apiFetch('/api/professionals/me/clients/' + clientId, {
       method: 'DELETE',
-      headers: profAuthHeaders()
+      headers: authHeaders()
     })
       .then(parseJson)
       .then(function (result) {
@@ -228,7 +247,7 @@
   el.newCo.addEventListener('keydown', function (e) { if (e.key === 'Enter') addClient(); });
   el.addClientBtn.addEventListener('click', addClient);
 
-  // ---- Candidate: verify gate ----
+  // ---- Candidate: verify gate (Supabase email OTP, any email) ----
   function showCandEmailError(msg) { el.candEmailError.textContent = msg; el.candEmailError.hidden = false; }
   function hideCandEmailError() { el.candEmailError.textContent = ''; el.candEmailError.hidden = true; }
   function showCandCodeError(msg) { el.candCodeError.textContent = msg; el.candCodeError.hidden = false; }
@@ -236,93 +255,44 @@
 
   function candidateRequestCode() {
     hideCandEmailError();
-    var email = (state.candidateEmail || '').trim();
+    var email = (state.candidateEmail || '').trim().toLowerCase();
+    if (!email || email.indexOf('@') === -1 || !email.split('@')[1]) {
+      showCandEmailError('Enter a valid email address.');
+      return;
+    }
     el.candVerifyBtn.disabled = true;
-    apiFetch('/api/professionals/request-code', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email })
-    })
-      .then(parseJson)
-      .then(function (result) {
-        el.candVerifyBtn.disabled = false;
-        if (!result.ok) { showCandEmailError(result.data.error || 'Something went wrong.'); return; }
-        state.candidatePendingEmail = result.data.email;
-        state.candidateStage = 'code';
-        el.candCodeStageEmail.textContent = result.data.email;
-        el.candCode.value = '';
-        hideCandCodeError();
-        if (result.data.devCode) {
-          el.candDevCodeBanner.hidden = false;
-          el.candDevCodeBanner.innerHTML = 'Dev mode (no email sent): your code is <strong>' + esc(result.data.devCode) + '</strong>';
-        } else {
-          el.candDevCodeBanner.hidden = true;
-        }
-        renderShell();
-        el.candCode.focus();
-      })
-      .catch(function (err) {
-        el.candVerifyBtn.disabled = false;
-        showCandEmailError(err.message);
-      });
+    sb.auth.signInWithOtp({ email: email }).then(function (result) {
+      el.candVerifyBtn.disabled = false;
+      if (result.error) { showCandEmailError(result.error.message); return; }
+      state.candidatePendingEmail = email;
+      state.candidateStage = 'code';
+      el.candCodeStageEmail.textContent = email;
+      el.candCode.value = '';
+      hideCandCodeError();
+      renderShell();
+      el.candCode.focus();
+    });
   }
 
   function candidateVerifyCode() {
     hideCandCodeError();
     var code = el.candCode.value.trim();
     el.candVerifyCodeBtn.disabled = true;
-    apiFetch('/api/professionals/verify-code', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: state.candidatePendingEmail, code: code })
-    })
-      .then(parseJson)
-      .then(function (result) {
-        el.candVerifyCodeBtn.disabled = false;
-        if (!result.ok) { showCandCodeError(result.data.error || 'Something went wrong.'); return; }
-        localStorage.setItem(PROFESSIONAL_TOKEN_KEY, result.data.token);
-        state.candidateLoggedIn = true;
-        state.candidateStage = 'email';
-        applyProfile(result.data.profile);
-        renderShell();
-      })
-      .catch(function (err) {
-        el.candVerifyCodeBtn.disabled = false;
-        showCandCodeError(err.message);
-      });
+    sb.auth.verifyOtp({ email: state.candidatePendingEmail, token: code, type: 'email' }).then(function (result) {
+      el.candVerifyCodeBtn.disabled = false;
+      if (result.error || !result.data.session) {
+        showCandCodeError(result.error ? result.error.message : 'That code is incorrect or has expired.');
+        return;
+      }
+      state.candidateStage = 'email';
+      onSignedIn(result.data.session);
+    });
   }
 
   function candidateBackToEmail() {
     state.candidateStage = 'email';
     hideCandCodeError();
     renderShell();
-  }
-
-  function candidateSignOut() {
-    localStorage.removeItem(PROFESSIONAL_TOKEN_KEY);
-    state.candidateLoggedIn = false;
-    state.candidateStage = 'email';
-    state.candidateEmail = '';
-    state.candidatePendingEmail = '';
-    state.previewIdx = 0;
-    el.candEmail.value = '';
-    hideCandEmailError();
-    applyProfile({ name: '', employer: '', title: '', desc: '', clients: [], email: '' });
-    renderShell();
-  }
-
-  function restoreCandidateSession() {
-    var token = localStorage.getItem(PROFESSIONAL_TOKEN_KEY);
-    if (!token) return;
-    apiFetch('/api/professionals/me', { headers: { Authorization: 'Bearer ' + token } })
-      .then(function (res) { return res.ok ? res.json() : null; })
-      .then(function (data) {
-        if (!data) { localStorage.removeItem(PROFESSIONAL_TOKEN_KEY); return; }
-        state.candidateLoggedIn = true;
-        applyProfile(data);
-        renderShell();
-      })
-      .catch(function () {});
   }
 
   el.candEmail.addEventListener('input', function () { state.candidateEmail = el.candEmail.value; hideCandEmailError(); });
@@ -332,98 +302,50 @@
   el.candCode.addEventListener('keydown', function (e) { if (e.key === 'Enter') candidateVerifyCode(); });
   el.candVerifyCodeBtn.addEventListener('click', candidateVerifyCode);
   el.candBackToEmailBtn.addEventListener('click', candidateBackToEmail);
-  el.candidateSignOutBtn.addEventListener('click', candidateSignOut);
+  el.candidateSignOutBtn.addEventListener('click', signOutEverywhere);
 
-  // ---- Recruiter: verify ----
-  function renderDemoEmails() {
-    el.demoEmails.innerHTML = Object.keys(DOMAINS).map(function (d) {
-      return '<button class="demo-chip" type="button" data-email="jordan@' + esc(d) + '">jordan@' + esc(d) + '</button>';
-    }).join('');
-    Array.prototype.forEach.call(el.demoEmails.querySelectorAll('.demo-chip'), function (btn) {
-      btn.addEventListener('click', function () {
-        var email = btn.getAttribute('data-email');
-        state.email = email;
-        el.recEmail.value = email;
-        hideEmailError();
-      });
-    });
-  }
+  // ---- Recruiter: verify gate (Supabase email OTP, work email only) ----
+  function showEmailError(msg) { el.emailError.textContent = msg; el.emailError.hidden = false; }
+  function hideEmailError() { el.emailError.textContent = ''; el.emailError.hidden = true; }
+  function showCodeError(msg) { el.codeError.textContent = msg; el.codeError.hidden = false; }
+  function hideCodeError() { el.codeError.textContent = ''; el.codeError.hidden = true; }
 
-  function showEmailError(msg) {
-    el.emailError.textContent = msg;
-    el.emailError.hidden = false;
-  }
-  function hideEmailError() {
-    el.emailError.textContent = '';
-    el.emailError.hidden = true;
-  }
-  function showCodeError(msg) {
-    el.codeError.textContent = msg;
-    el.codeError.hidden = false;
-  }
-  function hideCodeError() {
-    el.codeError.textContent = '';
-    el.codeError.hidden = true;
-  }
+  function isPersonalDomain(domain) { return /gmail|yahoo|outlook|hotmail|icloud/.test(domain); }
 
   function requestCode() {
     hideEmailError();
-    var email = (state.email || '').trim();
+    var email = (state.email || '').trim().toLowerCase();
+    var domain = email.split('@')[1];
+    if (!domain || email.indexOf('@') === -1) { showEmailError('Enter a valid work email.'); return; }
+    if (isPersonalDomain(domain)) { showEmailError('Personal email addresses can’t be verified. Use your company email.'); return; }
     el.verifyBtn.disabled = true;
-    apiFetch('/api/recruiters/request-code', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email })
-    })
-      .then(parseJson)
-      .then(function (result) {
-        el.verifyBtn.disabled = false;
-        if (!result.ok) { showEmailError(result.data.error || 'Something went wrong.'); return; }
-        state.pendingEmail = result.data.email;
-        state.recStage = 'code';
-        el.codeStageEmail.textContent = result.data.email;
-        el.recCode.value = '';
-        hideCodeError();
-        if (result.data.devCode) {
-          el.devCodeBanner.hidden = false;
-          el.devCodeBanner.innerHTML = 'Dev mode (no email sent): your code is <strong>' + esc(result.data.devCode) + '</strong>';
-        } else {
-          el.devCodeBanner.hidden = true;
-        }
-        renderShell();
-        el.recCode.focus();
-      })
-      .catch(function (err) {
-        el.verifyBtn.disabled = false;
-        showEmailError(err.message);
-      });
+    sb.auth.signInWithOtp({ email: email }).then(function (result) {
+      el.verifyBtn.disabled = false;
+      if (result.error) { showEmailError(result.error.message); return; }
+      state.pendingEmail = email;
+      state.recStage = 'code';
+      el.codeStageEmail.textContent = email;
+      el.recCode.value = '';
+      hideCodeError();
+      renderShell();
+      el.recCode.focus();
+    });
   }
 
   function verifyCode() {
     hideCodeError();
     var code = el.recCode.value.trim();
     el.verifyCodeBtn.disabled = true;
-    apiFetch('/api/recruiters/verify-code', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: state.pendingEmail, code: code })
-    })
-      .then(parseJson)
-      .then(function (result) {
-        el.verifyCodeBtn.disabled = false;
-        if (!result.ok) { showCodeError(result.data.error || 'Something went wrong.'); return; }
-        localStorage.setItem(RECRUITER_TOKEN_KEY, result.data.token);
-        state.email = result.data.email;
-        state.recCompany = result.data.company;
-        state.selectedId = null;
-        state.contacted = {};
-        state.recStage = 'email';
-        renderShell();
-      })
-      .catch(function (err) {
-        el.verifyCodeBtn.disabled = false;
-        showCodeError(err.message);
-      });
+    sb.auth.verifyOtp({ email: state.pendingEmail, token: code, type: 'email' }).then(function (result) {
+      el.verifyCodeBtn.disabled = false;
+      if (result.error || !result.data.session) {
+        showCodeError(result.error ? result.error.message : 'That code is incorrect or has expired.');
+        return;
+      }
+      state.recStage = 'email';
+      state.recruiterChecked = false;
+      onSignedIn(result.data.session);
+    });
   }
 
   function backToEmail() {
@@ -432,18 +354,33 @@
     renderShell();
   }
 
-  function restoreSession() {
-    var token = localStorage.getItem(RECRUITER_TOKEN_KEY);
-    if (!token) return;
-    apiFetch('/api/recruiters/me', { headers: { Authorization: 'Bearer ' + token } })
-      .then(function (res) { return res.ok ? res.json() : null; })
+  function loadOrFinalizeRecruiter() {
+    apiFetch('/api/recruiters/me', { headers: authHeaders() })
+      .then(function (res) { return res.ok ? res.json() : { __missing: true }; })
       .then(function (data) {
-        if (!data) { localStorage.removeItem(RECRUITER_TOKEN_KEY); return; }
+        if (data.__missing) return finalizeRecruiter();
         state.email = data.email;
         state.recCompany = data.company;
         renderShell();
       })
-      .catch(function () {});
+      .catch(function (err) { console.error(err); });
+  }
+
+  function finalizeRecruiter() {
+    apiFetch('/api/recruiters/finalize', { method: 'POST', headers: authHeaders() })
+      .then(parseJson)
+      .then(function (result) {
+        if (!result.ok) {
+          state.email = state.sbEmail || '';
+          el.recEmail.value = state.email;
+          showEmailError(result.data.error || 'Verify a work email to see recruiter results.');
+          return;
+        }
+        state.email = result.data.email;
+        state.recCompany = result.data.company;
+        renderShell();
+      })
+      .catch(function (err) { console.error(err); });
   }
 
   el.recEmail.addEventListener('input', function () { state.email = el.recEmail.value; hideEmailError(); });
@@ -456,10 +393,9 @@
 
   // ---- Recruiter: results ----
   function loadAndRenderResults() {
-    var token = localStorage.getItem(RECRUITER_TOKEN_KEY);
     el.resultsHeading.textContent = 'People who work with ' + state.recCompany;
     el.resultsEmail.textContent = state.email;
-    apiFetch('/api/recruiters/matches', { headers: { Authorization: 'Bearer ' + token } })
+    apiFetch('/api/recruiters/matches', { headers: authHeaders() })
       .then(parseJson)
       .then(function (result) {
         state.matches = result.ok ? result.data.matches : [];
@@ -529,8 +465,19 @@
     }
   }
 
-  function signOut() {
-    localStorage.removeItem(RECRUITER_TOKEN_KEY);
+  el.signOutBtn.addEventListener('click', signOutEverywhere);
+
+  // ---- Shared Supabase session handling ----
+  function resetSignedOutState() {
+    state.sbToken = null;
+    state.sbEmail = null;
+    state.recruiterChecked = false;
+    state.professionalLoaded = false;
+    state.candidateLoggedIn = false;
+    state.candidateStage = 'email';
+    state.candidateEmail = '';
+    state.candidatePendingEmail = '';
+    state.previewIdx = 0;
     state.recCompany = null;
     state.email = '';
     state.pendingEmail = '';
@@ -538,11 +485,48 @@
     state.selectedId = null;
     state.contacted = {};
     state.matches = [];
+    el.candEmail.value = '';
     el.recEmail.value = '';
+    hideCandEmailError();
     hideEmailError();
+    applyProfile({ name: '', employer: '', title: '', desc: '', clients: [], email: '' });
+  }
+
+  function onSignedIn(session) {
+    var isNewIdentity = state.sbEmail && state.sbEmail !== session.user.email;
+    state.sbToken = session.access_token;
+    state.sbEmail = session.user.email;
+    if (isNewIdentity) {
+      // Signed in as someone else without an explicit sign-out first (e.g. verified a
+      // different email on the other tab's gate) -- clear stale per-identity state.
+      state.recruiterChecked = false;
+      state.professionalLoaded = false;
+      state.candidateLoggedIn = false;
+      state.recCompany = null;
+      state.email = '';
+      state.selectedId = null;
+      state.contacted = {};
+      state.matches = [];
+      applyProfile({ name: '', employer: '', title: '', desc: '', clients: [], email: '' });
+    }
     renderShell();
   }
-  el.signOutBtn.addEventListener('click', signOut);
+
+  function signOutEverywhere() {
+    sb.auth.signOut().then(function () {
+      resetSignedOutState();
+      renderShell();
+    });
+  }
+
+  sb.auth.onAuthStateChange(function (event, session) {
+    if (session && session.access_token !== state.sbToken) {
+      onSignedIn(session);
+    } else if (!session && state.sbToken) {
+      resetSignedOutState();
+      renderShell();
+    }
+  });
 
   // ---- Navigation wiring ----
   el.logoBtn.addEventListener('click', function () { goTo('landing'); });
@@ -556,8 +540,5 @@
   renderClientRows();
   renderPreviewChips();
   renderPreviewArea();
-  renderDemoEmails();
   renderShell();
-  restoreSession();
-  restoreCandidateSession();
 })();

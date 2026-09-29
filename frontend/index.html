@@ -8,6 +8,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="/config.js"></script>
 </head>
 <body>
 <div class="page">
@@ -151,7 +153,6 @@
         <div id="candidate-stage-code" class="verify-stage" hidden>
           <h2>Enter your verification code</h2>
           <p class="verify-desc">We sent a 6-digit code to <strong id="cand-code-stage-email"></strong>.</p>
-          <div id="cand-dev-code-banner" class="dev-code-banner" hidden></div>
           <label class="field">Verification code<input id="cand-code" type="text" inputmode="numeric" maxlength="6" placeholder="123456"></label>
           <span id="cand-code-error" class="email-error" hidden></span>
           <button id="cand-verify-code-btn" class="btn-dark-pill btn-wide" type="button">Verify code</button>
@@ -242,15 +243,10 @@
           <label class="field">Work email<input id="rec-email" type="text" placeholder="you@company.com"></label>
           <span id="email-error" class="email-error" hidden></span>
           <button id="verify-btn" class="btn-dark-pill btn-wide" type="button">Send verification code</button>
-          <div class="demo-accounts">
-            <span>Demo accounts:</span>
-            <div id="demo-emails" class="demo-emails"></div>
-          </div>
         </div>
         <div id="verify-stage-code" class="verify-stage" hidden>
           <h2>Enter your verification code</h2>
           <p class="verify-desc">We sent a 6-digit code to <strong id="code-stage-email"></strong>.</p>
-          <div id="dev-code-banner" class="dev-code-banner" hidden></div>
           <label class="field">Verification code<input id="rec-code" type="text" inputmode="numeric" maxlength="6" placeholder="123456"></label>
           <span id="code-error" class="email-error" hidden></span>
           <button id="verify-code-btn" class="btn-dark-pill btn-wide" type="button">Verify code</button>

@@ -340,17 +340,6 @@ main.view { flex: 1; }
 .verify-desc { margin: 0; font-size: 16px; line-height: 1.5; color: var(--body); }
 .verify-col .field input { font-size: 17px; padding: 13px 14px; }
 .email-error { font-size: 14px; color: var(--error); }
-.demo-accounts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
-.demo-emails { display: flex; flex-wrap: wrap; gap: 8px; }
-.dev-code-banner {
-  border: 1px solid var(--accent-border); background: var(--accent-tint);
-  border-radius: 10px; padding: 12px 14px; font-size: 14px; line-height: 1.5; color: var(--body-strong);
-}
-.dev-code-banner strong { font-family: 'Instrument Serif', serif; font-size: 20px; letter-spacing: 0.05em; color: var(--ink); }
-.demo-chip {
-  border: 1px solid var(--input-border); background: var(--surface); border-radius: 999px;
-  padding: 5px 10px; font-size: 13px; cursor: pointer; color: oklch(0.3 0.012 60);
-}
 
 /* Recruiter: results */
 #view-recruiter-verified {

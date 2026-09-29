@@ -6,9 +6,11 @@ services:
     buildCommand: pip install -r backend/requirements.txt
     startCommand: gunicorn --chdir backend app:app --workers 1 --threads 2 --timeout 120
     envVars:
-      - key: SECRET_KEY
-        generateValue: true
-      - key: STUB_EMAIL
-        value: "true"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
       - key: PYTHON_VERSION
         value: "3.11.9"
