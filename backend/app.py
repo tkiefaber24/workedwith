@@ -82,16 +82,27 @@ def recruiter_me():
     return jsonify(recruiter_json(result.data[0]))
 
 
+def get_verified_recruiter(user):
+    rec = get_supabase().table("recruiters").select("*").eq("user_id", user.id).execute().data
+    return rec[0] if rec else None
+
+
+def professional_matches_company(professional_id, company):
+    match = get_supabase().table("professional_clients").select("professional_id") \
+        .eq("professional_id", professional_id).ilike("company", company.strip()).execute().data
+    return bool(match)
+
+
 @app.route("/api/recruiters/matches", methods=["GET"])
 def recruiter_matches():
     user = get_current_user(request)
     if not user:
         return jsonify({"error": "Unauthorized"}), 401
     sb = get_supabase()
-    rec = sb.table("recruiters").select("*").eq("user_id", user.id).execute().data
+    rec = get_verified_recruiter(user)
     if not rec:
         return jsonify({"error": "Not a verified recruiter yet."}), 404
-    company = rec[0]["company"]
+    company = rec["company"]
 
     clients = sb.table("professional_clients").select("professional_id, company") \
         .ilike("company", company.strip()).execute().data
@@ -104,10 +115,14 @@ def recruiter_matches():
             match_company_by_id[pid] = c["company"]
             ordered_ids.append(pid)
 
+    contacted_ids = set()
     matches = []
     if ordered_ids:
         profs = sb.table("professionals").select("*").in_("id", ordered_ids).execute().data
         by_id = {p["id"]: p for p in profs}
+        msgs = sb.table("messages").select("professional_id").eq("recruiter_id", rec["id"]) \
+            .in_("professional_id", ordered_ids).execute().data
+        contacted_ids = {m["professional_id"] for m in msgs}
         for pid in ordered_ids:
             p = by_id.get(pid)
             if not p:
@@ -117,6 +132,7 @@ def recruiter_matches():
                 "title": p["title"], "desc": p["description"],
                 "matchCompany": match_company_by_id[pid],
                 "hasResume": bool(p.get("resume_path")),
+                "contacted": pid in contacted_ids,
             })
 
     return jsonify({"company": company, "matches": matches})
@@ -128,16 +144,13 @@ def recruiter_match_resume_url(professional_id):
     if not user:
         return jsonify({"error": "Unauthorized"}), 401
     sb = get_supabase()
-    rec = sb.table("recruiters").select("*").eq("user_id", user.id).execute().data
+    rec = get_verified_recruiter(user)
     if not rec:
         return jsonify({"error": "Not a verified recruiter yet."}), 404
-    company = rec[0]["company"]
 
     # Only allow this if the professional actually lists the recruiter's company --
     # same privacy rule as /matches, enforced again here since this is a separate route.
-    match = sb.table("professional_clients").select("professional_id") \
-        .eq("professional_id", professional_id).ilike("company", company.strip()).execute().data
-    if not match:
+    if not professional_matches_company(professional_id, rec["company"]):
         return jsonify({"error": "Not authorized to view this resume."}), 403
 
     prof = sb.table("professionals").select("resume_path").eq("id", professional_id).execute().data
@@ -145,6 +158,54 @@ def recruiter_match_resume_url(professional_id):
         return jsonify({"error": "No resume uploaded."}), 404
 
     return jsonify({"url": signed_resume_url(prof[0]["resume_path"])})
+
+
+def messages_json(rows):
+    return [{"id": r["id"], "sender": r["sender"], "body": r["body"], "createdAt": r["created_at"]} for r in rows]
+
+
+@app.route("/api/recruiters/matches/<int:professional_id>/messages", methods=["GET"])
+def recruiter_thread_messages(professional_id):
+    user = get_current_user(request)
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+    rec = get_verified_recruiter(user)
+    if not rec:
+        return jsonify({"error": "Not a verified recruiter yet."}), 404
+    if not professional_matches_company(professional_id, rec["company"]):
+        return jsonify({"error": "Not authorized to message this person."}), 403
+
+    rows = get_supabase().table("messages").select("*") \
+        .eq("professional_id", professional_id).eq("recruiter_id", rec["id"]) \
+        .order("created_at").execute().data
+    return jsonify({"messages": messages_json(rows)})
+
+
+@app.route("/api/recruiters/matches/<int:professional_id>/messages", methods=["POST"])
+def recruiter_send_message(professional_id):
+    user = get_current_user(request)
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+    rec = get_verified_recruiter(user)
+    if not rec:
+        return jsonify({"error": "Not a verified recruiter yet."}), 404
+    if not professional_matches_company(professional_id, rec["company"]):
+        return jsonify({"error": "Not authorized to message this person."}), 403
+
+    body = request.get_json(silent=True) or {}
+    text = (body.get("body") or "").strip()[:4000]
+    if not text:
+        return jsonify({"error": "Message can't be empty."}), 400
+
+    sb = get_supabase()
+    sb.table("messages").insert({
+        "professional_id": professional_id, "recruiter_id": rec["id"],
+        "sender": "recruiter", "body": text,
+    }).execute()
+    rows = sb.table("messages").select("*") \
+        .eq("professional_id", professional_id).eq("recruiter_id", rec["id"]) \
+        .order("created_at").execute().data
+    return jsonify({"messages": messages_json(rows)})
 
 
 # ---- Professionals ----
@@ -284,6 +345,84 @@ def professional_resume_url():
     if not row.get("resume_path"):
         return jsonify({"error": "No resume uploaded yet."}), 404
     return jsonify({"url": signed_resume_url(row["resume_path"])})
+
+
+@app.route("/api/professionals/me/conversations", methods=["GET"])
+def professional_conversations():
+    user = get_current_user(request)
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+    row = get_or_create_professional(user)
+    sb = get_supabase()
+
+    msgs = sb.table("messages").select("recruiter_id, sender, body, created_at") \
+        .eq("professional_id", row["id"]).order("created_at").execute().data
+    last_by_recruiter = {}
+    for m in msgs:
+        last_by_recruiter[m["recruiter_id"]] = m  # ascending order -> last write wins
+
+    if not last_by_recruiter:
+        return jsonify({"conversations": []})
+
+    recruiters = sb.table("recruiters").select("id, company").in_("id", list(last_by_recruiter.keys())).execute().data
+    company_by_id = {r["id"]: r["company"] for r in recruiters}
+
+    conversations = []
+    for rid, last in last_by_recruiter.items():
+        company = company_by_id.get(rid)
+        if not company:
+            continue
+        conversations.append({
+            "recruiterId": rid, "company": company,
+            "lastMessage": last["body"], "lastSender": last["sender"], "lastAt": last["created_at"],
+        })
+    conversations.sort(key=lambda c: c["lastAt"], reverse=True)
+    return jsonify({"conversations": conversations})
+
+
+@app.route("/api/professionals/me/conversations/<int:recruiter_id>/messages", methods=["GET"])
+def professional_thread_messages(recruiter_id):
+    user = get_current_user(request)
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+    row = get_or_create_professional(user)
+
+    rows = get_supabase().table("messages").select("*") \
+        .eq("professional_id", row["id"]).eq("recruiter_id", recruiter_id) \
+        .order("created_at").execute().data
+    if not rows:
+        return jsonify({"error": "No conversation found."}), 404
+    return jsonify({"messages": messages_json(rows)})
+
+
+@app.route("/api/professionals/me/conversations/<int:recruiter_id>/messages", methods=["POST"])
+def professional_send_message(recruiter_id):
+    user = get_current_user(request)
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+    row = get_or_create_professional(user)
+    sb = get_supabase()
+
+    # A professional can only reply to a recruiter who has already reached out --
+    # they can't use this to start a conversation with an arbitrary recruiter_id.
+    existing = sb.table("messages").select("id") \
+        .eq("professional_id", row["id"]).eq("recruiter_id", recruiter_id).limit(1).execute().data
+    if not existing:
+        return jsonify({"error": "This recruiter hasn't reached out yet."}), 403
+
+    body = request.get_json(silent=True) or {}
+    text = (body.get("body") or "").strip()[:4000]
+    if not text:
+        return jsonify({"error": "Message can't be empty."}), 400
+
+    sb.table("messages").insert({
+        "professional_id": row["id"], "recruiter_id": recruiter_id,
+        "sender": "professional", "body": text,
+    }).execute()
+    rows = sb.table("messages").select("*") \
+        .eq("professional_id", row["id"]).eq("recruiter_id", recruiter_id) \
+        .order("created_at").execute().data
+    return jsonify({"messages": messages_json(rows)})
 
 
 @app.route("/api/health", methods=["GET"])

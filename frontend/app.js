@@ -49,7 +49,9 @@
     candidateLoggedIn: false, candidateStage: 'email', candidateEmail: '',
     newCo: '', previewIdx: 0,
     email: '', recStage: 'email',
-    recCompany: null, selectedId: null, contacted: {}, matches: []
+    recCompany: null, selectedId: null, matches: [],
+    threadForId: null, threadMessages: [],
+    conversations: [], convSelectedId: null, convThreadForId: null, convThreadMessages: []
   };
 
   var el = {};
@@ -64,6 +66,7 @@
     'client-rows', 'new-co', 'add-client-btn',
     'resume-status', 'resume-view-link', 'resume-file-input', 'resume-upload-btn', 'resume-error',
     'preview-chips', 'preview-area',
+    'conv-list', 'conv-detail-panel',
     'verify-stage-email', 'verify-stage-sent',
     'rec-email', 'email-error', 'verify-btn',
     'rec-sent-email', 'back-to-email-btn',
@@ -239,6 +242,136 @@
   });
   el.resumeViewLink.addEventListener('click', function (e) { e.preventDefault(); viewResume(); });
 
+  // ---- Candidate: messages from recruiters ----
+  function loadConversations() {
+    apiFetch('/api/professionals/me/conversations', { headers: authHeaders() })
+      .then(parseJson)
+      .then(function (result) {
+        state.conversations = result.ok ? result.data.conversations : [];
+        renderConvList();
+      })
+      .catch(function () { state.conversations = []; renderConvList(); });
+  }
+
+  function renderConvList() {
+    var convs = state.conversations;
+    var selId = state.convSelectedId && convs.some(function (c) { return c.recruiterId === state.convSelectedId; })
+      ? state.convSelectedId : (convs[0] ? convs[0].recruiterId : null);
+    state.convSelectedId = selId;
+
+    if (!convs.length) {
+      el.convList.innerHTML = '<div class="empty-state" style="border:1px dashed var(--dashed-border);border-radius:14px;padding:28px;text-align:left">No messages yet. When a recruiter reaches out about a company you list, it’ll show up here.</div>';
+      el.convDetailPanel.innerHTML = '';
+      return;
+    }
+
+    el.convList.innerHTML = convs.map(function (c) {
+      var active = c.recruiterId === selId;
+      var prefix = c.lastSender === 'professional' ? 'You: ' : '';
+      return '<button class="conv-row' + (active ? ' active' : '') + '" type="button" data-id="' + c.recruiterId + '">' +
+        '<span class="avatar avatar-neutral">' + esc(initials(c.company)) + '</span>' +
+        '<span class="conv-row-name"><span>' + esc(c.company) + '</span>' +
+        '<span class="conv-row-preview">' + esc(prefix + c.lastMessage) + '</span></span>' +
+        '</button>';
+    }).join('');
+    Array.prototype.forEach.call(el.convList.querySelectorAll('.conv-row'), function (btn) {
+      btn.addEventListener('click', function () {
+        state.convSelectedId = Number(btn.getAttribute('data-id'));
+        renderConvList();
+      });
+    });
+
+    renderConvDetail(selId);
+  }
+
+  function renderConvDetail(recruiterId) {
+    if (!recruiterId) { el.convDetailPanel.innerHTML = ''; return; }
+    var conv = state.conversations.find(function (c) { return c.recruiterId === recruiterId; });
+    if (!conv) { el.convDetailPanel.innerHTML = ''; return; }
+
+    var isNewSelection = state.convThreadForId !== recruiterId;
+    if (isNewSelection) {
+      state.convThreadForId = recruiterId;
+      state.convThreadMessages = [];
+    }
+
+    el.convDetailPanel.innerHTML =
+      '<div class="detail-top">' +
+        '<span class="avatar avatar-blue detail-avatar">' + esc(initials(conv.company)) + '</span>' +
+        '<div class="detail-name"><span class="name-serif">' + esc(conv.company) + '</span>' +
+        '<span class="sub">A recruiter from this company</span></div>' +
+      '</div>' +
+      '<div id="conv-message-list" class="message-list"></div>' +
+      '<div class="message-compose">' +
+        '<textarea id="conv-message-input" rows="2" placeholder="Write a reply..."></textarea>' +
+        '<button id="conv-message-send-btn" class="btn-dark-pill" type="button">Send</button>' +
+      '</div>';
+
+    renderConvMessageList();
+    document.getElementById('conv-message-send-btn').addEventListener('click', function () { sendConvMessage(recruiterId); });
+    document.getElementById('conv-message-input').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendConvMessage(recruiterId); }
+    });
+
+    if (isNewSelection) loadConvThread(recruiterId);
+  }
+
+  function renderConvMessageList() {
+    var list = document.getElementById('conv-message-list');
+    if (!list) return;
+    if (!state.convThreadMessages.length) {
+      list.innerHTML = '<div class="message-empty">No messages yet.</div>';
+    } else {
+      list.innerHTML = state.convThreadMessages.map(function (m) {
+        return '<div class="message-bubble ' + (m.sender === 'professional' ? 'message-mine' : 'message-theirs') + '">' + esc(m.body) + '</div>';
+      }).join('');
+    }
+    list.scrollTop = list.scrollHeight;
+  }
+
+  function loadConvThread(recruiterId) {
+    apiFetch('/api/professionals/me/conversations/' + recruiterId + '/messages', { headers: authHeaders() })
+      .then(parseJson)
+      .then(function (result) {
+        if (state.convThreadForId !== recruiterId) return;
+        state.convThreadMessages = result.ok ? result.data.messages : [];
+        renderConvMessageList();
+      })
+      .catch(function () {
+        if (state.convThreadForId !== recruiterId) return;
+        state.convThreadMessages = [];
+        renderConvMessageList();
+      });
+  }
+
+  function sendConvMessage(recruiterId) {
+    var input = document.getElementById('conv-message-input');
+    var text = input ? input.value.trim() : '';
+    if (!text) return;
+    var btn = document.getElementById('conv-message-send-btn');
+    if (btn) btn.disabled = true;
+    apiFetch('/api/professionals/me/conversations/' + recruiterId + '/messages', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ body: text })
+    })
+      .then(parseJson)
+      .then(function (result) {
+        if (btn) btn.disabled = false;
+        if (!result.ok) return;
+        state.convThreadMessages = result.data.messages;
+        if (input) input.value = '';
+        renderConvMessageList();
+        var conv = state.conversations.find(function (c) { return c.recruiterId === recruiterId; });
+        if (conv) {
+          conv.lastMessage = text;
+          conv.lastSender = 'professional';
+          renderConvList();
+        }
+      })
+      .catch(function (err) { if (btn) btn.disabled = false; console.error(err); });
+  }
+
   function loadProfessionalProfile() {
     apiFetch('/api/professionals/me', { headers: authHeaders() })
       .then(function (res) { return res.ok ? res.json() : null; })
@@ -246,6 +379,7 @@
         if (!data) return;
         state.candidateLoggedIn = true;
         applyProfile(data);
+        loadConversations();
         renderShell();
       })
       .catch(function (err) { console.error(err); });
@@ -436,7 +570,7 @@
           '<span class="avatar avatar-neutral">' + esc(initials(p.name)) + '</span>' +
           '<span class="match-row-name"><span>' + esc(p.name) + '</span>' +
           '<span class="match-row-sub">' + esc(p.title) + ' · ' + esc(p.employer) + '</span></span>' +
-          (state.contacted[p.id] ? '<span class="match-contacted">Contacted</span>' : '') +
+          (p.contacted ? '<span class="match-contacted">Contacted</span>' : '') +
           '</button>';
       }).join('');
       Array.prototype.forEach.call(el.matchesList.querySelectorAll('.match-row'), function (btn) {
@@ -450,36 +584,49 @@
     var selP = matches.find(function (m) { return m.id === selId; });
     if (!selP) {
       el.detailPanel.innerHTML = '';
+      state.threadForId = null;
       return;
     }
-    var contacted = !!state.contacted[selP.id];
+
+    var isNewSelection = state.threadForId !== selP.id;
+    if (isNewSelection) {
+      state.threadForId = selP.id;
+      state.threadMessages = [];
+    }
+
     el.detailPanel.innerHTML =
       '<div class="detail-top">' +
         '<span class="avatar avatar-blue detail-avatar">' + esc(initials(selP.name)) + '</span>' +
         '<div class="detail-name"><span class="name-serif">' + esc(selP.name) + '</span>' +
         '<span class="sub">' + esc(selP.title) + ' at <strong>' + esc(selP.employer) + '</strong></span></div>' +
         (selP.hasResume ? '<button class="link-btn" type="button" id="resume-link-btn">View resume</button>' : '') +
-        (contacted
-          ? '<span class="request-sent">Request sent</span>'
-          : '<button class="reach-out-btn" type="button" id="contact-btn">Reach out</button>') +
       '</div>' +
       '<p class="detail-desc">' + esc(selP.desc) + '</p>' +
       '<div class="works-with-section">' +
         '<span class="label-caps">Works with</span>' +
         '<div class="works-with-box-lg detail-works-box"><span class="works-with-title">' + esc(selP.matchCompany) +
           ' <span class="works-with-you">· your company</span></span></div>' +
+      '</div>' +
+      '<div class="works-with-section">' +
+        '<span class="label-caps">Message ' + esc((selP.name || '').split(/\s+/)[0] || selP.name) + '</span>' +
+        '<div id="message-list" class="message-list"></div>' +
+        '<div class="message-compose">' +
+          '<textarea id="message-input" rows="2" placeholder="Write a message..."></textarea>' +
+          '<button id="message-send-btn" class="btn-dark-pill" type="button">Send</button>' +
+        '</div>' +
       '</div>';
-    var contactBtn = document.getElementById('contact-btn');
-    if (contactBtn) {
-      contactBtn.addEventListener('click', function () {
-        state.contacted[selP.id] = true;
-        renderResultsBody();
-      });
-    }
+
     var resumeLinkBtn = document.getElementById('resume-link-btn');
     if (resumeLinkBtn) {
       resumeLinkBtn.addEventListener('click', function () { viewMatchResume(selP.id); });
     }
+    renderMessageList();
+    document.getElementById('message-send-btn').addEventListener('click', function () { sendMessage(selP.id); });
+    document.getElementById('message-input').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(selP.id); }
+    });
+
+    if (isNewSelection) loadThread(selP.id);
   }
 
   function viewMatchResume(professionalId) {
@@ -490,6 +637,64 @@
         window.open(result.data.url, '_blank');
       })
       .catch(function (err) { console.error(err); });
+  }
+
+  function renderMessageList() {
+    var list = document.getElementById('message-list');
+    if (!list) return;
+    if (!state.threadMessages.length) {
+      list.innerHTML = '<div class="message-empty">No messages yet. Say hello.</div>';
+    } else {
+      list.innerHTML = state.threadMessages.map(function (m) {
+        return '<div class="message-bubble ' + (m.sender === 'recruiter' ? 'message-mine' : 'message-theirs') + '">' + esc(m.body) + '</div>';
+      }).join('');
+    }
+    list.scrollTop = list.scrollHeight;
+  }
+
+  function loadThread(professionalId) {
+    apiFetch('/api/recruiters/matches/' + professionalId + '/messages', { headers: authHeaders() })
+      .then(parseJson)
+      .then(function (result) {
+        if (state.threadForId !== professionalId) return;
+        state.threadMessages = result.ok ? result.data.messages : [];
+        renderMessageList();
+      })
+      .catch(function () {
+        if (state.threadForId !== professionalId) return;
+        state.threadMessages = [];
+        renderMessageList();
+      });
+  }
+
+  function sendMessage(professionalId) {
+    var input = document.getElementById('message-input');
+    var text = input ? input.value.trim() : '';
+    if (!text) return;
+    var btn = document.getElementById('message-send-btn');
+    if (btn) btn.disabled = true;
+    apiFetch('/api/recruiters/matches/' + professionalId + '/messages', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ body: text })
+    })
+      .then(parseJson)
+      .then(function (result) {
+        if (btn) btn.disabled = false;
+        if (!result.ok) return;
+        state.threadMessages = result.data.messages;
+        if (input) input.value = '';
+        renderMessageList();
+        var match = state.matches.find(function (m) { return m.id === professionalId; });
+        if (match && !match.contacted) {
+          match.contacted = true;
+          var row = el.matchesList.querySelector('.match-row[data-id="' + professionalId + '"]');
+          if (row && !row.querySelector('.match-contacted')) {
+            row.insertAdjacentHTML('beforeend', '<span class="match-contacted">Contacted</span>');
+          }
+        }
+      })
+      .catch(function (err) { if (btn) btn.disabled = false; console.error(err); });
   }
 
   el.signOutBtn.addEventListener('click', signOutEverywhere);
@@ -508,10 +713,18 @@
     state.email = '';
     state.recStage = 'email';
     state.selectedId = null;
-    state.contacted = {};
     state.matches = [];
+    state.threadForId = null;
+    state.threadMessages = [];
+    state.conversations = [];
+    state.convSelectedId = null;
+    state.convThreadForId = null;
+    state.convThreadMessages = [];
     el.candEmail.value = '';
     el.recEmail.value = '';
+    el.detailPanel.innerHTML = '';
+    el.convList.innerHTML = '';
+    el.convDetailPanel.innerHTML = '';
     hideCandEmailError();
     hideEmailError();
     applyProfile({ name: '', employer: '', title: '', desc: '', clients: [], email: '' });
@@ -537,8 +750,16 @@
       state.recCompany = null;
       state.email = '';
       state.selectedId = null;
-      state.contacted = {};
       state.matches = [];
+      state.threadForId = null;
+      state.threadMessages = [];
+      state.conversations = [];
+      state.convSelectedId = null;
+      state.convThreadForId = null;
+      state.convThreadMessages = [];
+      el.detailPanel.innerHTML = '';
+      el.convList.innerHTML = '';
+      el.convDetailPanel.innerHTML = '';
       applyProfile({ name: '', employer: '', title: '', desc: '', clients: [], email: '' });
     }
     renderShell();

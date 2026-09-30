@@ -34,6 +34,16 @@ create table if not exists public.professional_clients (
     sort_order integer not null default 0
 );
 
+create table if not exists public.messages (
+    id bigserial primary key,
+    professional_id bigint not null references public.professionals(id) on delete cascade,
+    recruiter_id bigint not null references public.recruiters(id) on delete cascade,
+    sender text not null check (sender in ('recruiter', 'professional')),
+    body text not null,
+    created_at timestamptz not null default now()
+);
+create index if not exists messages_thread_idx on public.messages (professional_id, recruiter_id, created_at);
+
 -- Deny-by-default: no policies means the public anon/authenticated keys can't
 -- read or write these tables directly. The Flask backend uses the service-role
 -- key, which bypasses RLS policies, but table-level GRANTs are a separate gate
@@ -43,13 +53,16 @@ create table if not exists public.professional_clients (
 alter table public.recruiters enable row level security;
 alter table public.professionals enable row level security;
 alter table public.professional_clients enable row level security;
+alter table public.messages enable row level security;
 
 grant select, insert, update, delete on public.recruiters to service_role;
 grant select, insert, update, delete on public.professionals to service_role;
 grant select, insert, update, delete on public.professional_clients to service_role;
+grant select, insert, update, delete on public.messages to service_role;
 grant usage, select on sequence public.recruiters_id_seq to service_role;
 grant usage, select on sequence public.professionals_id_seq to service_role;
 grant usage, select on sequence public.professional_clients_id_seq to service_role;
+grant usage, select on sequence public.messages_id_seq to service_role;
 
 -- Sample professionals so recruiter search has results before anyone signs up.
 -- user_id/email are left NULL -- these aren't real accounts, just seed data.
