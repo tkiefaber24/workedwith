@@ -66,10 +66,16 @@ def recruiter_finalize():
         return jsonify({"error": str(e)}), 400
 
     sb = get_supabase()
-    sb.table("recruiters").upsert({
+    payload = {
         "user_id": user.id, "email": email, "domain": domain,
         "company": company, "verified_at": now_iso(),
-    }, on_conflict="user_id").execute()
+    }
+    body = request.get_json(silent=True) or {}
+    if body.get("justSetPassword"):
+        # Only set on the truthy case -- omitting the key on a routine finalize call
+        # means the upsert's ON CONFLICT leaves any existing has_password untouched.
+        payload["has_password"] = True
+    sb.table("recruiters").upsert(payload, on_conflict="user_id").execute()
     row = sb.table("recruiters").select("*").eq("user_id", user.id).single().execute().data
     return jsonify(recruiter_json(row))
 
@@ -234,7 +240,7 @@ def professional_json(row):
     }
 
 
-def get_or_create_professional(user):
+def get_or_create_professional(user, has_password=False):
     sb = get_supabase()
     existing = sb.table("professionals").select("*").eq("user_id", user.id).execute().data
     if existing:
@@ -242,6 +248,7 @@ def get_or_create_professional(user):
     inserted = sb.table("professionals").insert({
         "user_id": user.id, "email": user.email,
         "name": "", "employer": "", "title": "", "description": "",
+        "has_password": bool(has_password),
     }).execute()
     return inserted.data[0]
 
@@ -251,7 +258,10 @@ def professional_me():
     user = get_current_user(request)
     if not user:
         return jsonify({"error": "Unauthorized"}), 401
-    row = get_or_create_professional(user)
+    # justSetPassword: the frontend sets this right after a signup-with-password flow,
+    # so the row is created with has_password already true instead of a separate
+    # follow-up call racing against a row that doesn't exist yet.
+    row = get_or_create_professional(user, has_password=request.args.get("justSetPassword") == "1")
     return jsonify(professional_json(row))
 
 

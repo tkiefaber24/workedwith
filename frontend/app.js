@@ -3,6 +3,7 @@
 
   var API_BASE = '';
   var INTENDED_VIEW_KEY = 'workedwith_intended_view';
+  var SIGNUP_PASSWORD_KEY = 'workedwith_signup_password_set';
   var sb = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 
   function initials(n) {
@@ -52,15 +53,18 @@
     recCompany: null, selectedId: null, matches: [],
     threadForId: null, threadMessages: [],
     conversations: [], convSelectedId: null, convThreadForId: null, convThreadMessages: [],
-    passwordSetupDismissedCand: false, passwordSetupDismissedRec: false
+    passwordSetupDismissedCand: false, passwordSetupDismissedRec: false,
+    justSetPasswordAtSignup: false
   };
 
   var el = {};
   ['logo-btn', 'tab-candidate', 'tab-recruiter', 'card-candidate', 'card-recruiter',
     'view-landing', 'view-candidate', 'view-recruiter-unverified', 'view-recruiter-verified',
     'candidate-gate', 'candidate-content',
-    'candidate-stage-password', 'candidate-stage-email', 'candidate-stage-sent',
-    'cand-login-email', 'cand-login-password', 'cand-login-error', 'cand-login-btn', 'cand-use-link-btn',
+    'candidate-stage-password', 'candidate-stage-signup', 'candidate-stage-email', 'candidate-stage-sent',
+    'cand-login-email', 'cand-login-password', 'cand-login-error', 'cand-login-btn',
+    'cand-goto-signup-btn', 'cand-use-link-btn',
+    'cand-signup-email', 'cand-signup-password', 'cand-signup-error', 'cand-signup-btn', 'cand-signup-back-to-password-btn',
     'cand-email', 'cand-email-error', 'cand-verify-btn', 'cand-back-to-password-btn',
     'cand-sent-email', 'cand-back-to-email-btn',
     'candidate-signed-in-as', 'candidate-sign-out-btn',
@@ -72,8 +76,10 @@
     'preview-chips', 'preview-area',
     'conv-list', 'conv-detail-panel',
     'resume-modal', 'resume-modal-backdrop', 'resume-modal-title', 'resume-modal-close', 'resume-modal-frame',
-    'verify-stage-password', 'verify-stage-email', 'verify-stage-sent',
-    'rec-login-email', 'rec-login-password', 'rec-login-error', 'rec-login-btn', 'rec-use-link-btn',
+    'verify-stage-password', 'verify-stage-signup', 'verify-stage-email', 'verify-stage-sent',
+    'rec-login-email', 'rec-login-password', 'rec-login-error', 'rec-login-btn',
+    'rec-goto-signup-btn', 'rec-use-link-btn',
+    'rec-signup-email', 'rec-signup-password', 'rec-signup-error', 'rec-signup-btn', 'rec-signup-back-to-password-btn',
     'rec-email', 'email-error', 'verify-btn', 'rec-back-to-password-btn',
     'rec-sent-email', 'back-to-email-btn',
     'results-heading', 'results-count', 'results-email', 'sign-out-btn',
@@ -100,12 +106,14 @@
     el.candidateGate.hidden = state.candidateLoggedIn;
     el.candidateContent.hidden = !state.candidateLoggedIn;
     el.candidateStagePassword.hidden = state.candidateStage !== 'password';
+    el.candidateStageSignup.hidden = state.candidateStage !== 'signup';
     el.candidateStageEmail.hidden = state.candidateStage !== 'email';
     el.candidateStageSent.hidden = state.candidateStage !== 'sent';
     if (state.candidateLoggedIn) el.candidateSignedInAs.textContent = 'Signed in as ' + state.candidateEmail;
     el.candidatePasswordSetup.hidden = !(state.candidateLoggedIn && !state.me.hasPassword && !state.passwordSetupDismissedCand);
 
     el.verifyStagePassword.hidden = state.recStage !== 'password';
+    el.verifyStageSignup.hidden = state.recStage !== 'signup';
     el.verifyStageEmail.hidden = state.recStage !== 'email';
     el.verifyStageSent.hidden = state.recStage !== 'sent';
     el.recPasswordSetup.hidden = !(recruiterVerified && !state.recHasPassword && !state.passwordSetupDismissedRec);
@@ -407,10 +415,12 @@
   }
 
   function loadProfessionalProfile() {
-    apiFetch('/api/professionals/me', { headers: authHeaders() })
+    var qs = state.justSetPasswordAtSignup ? '?justSetPassword=1' : '';
+    apiFetch('/api/professionals/me' + qs, { headers: authHeaders() })
       .then(function (res) { return res.ok ? res.json() : null; })
       .then(function (data) {
         if (!data) return;
+        state.justSetPasswordAtSignup = false;
         state.candidateLoggedIn = true;
         applyProfile(data);
         loadConversations();
@@ -544,6 +554,57 @@
   el.candUseLinkBtn.addEventListener('click', candidateShowLinkStage);
   el.candBackToPasswordBtn.addEventListener('click', candidateShowPasswordStage);
 
+  // ---- Candidate: create account with email + password, verified via the same email link ----
+  function showCandSignupError(msg) { el.candSignupError.textContent = msg; el.candSignupError.hidden = false; }
+  function hideCandSignupError() { el.candSignupError.textContent = ''; el.candSignupError.hidden = true; }
+
+  function candidateSignUp() {
+    hideCandSignupError();
+    var email = (el.candSignupEmail.value || '').trim().toLowerCase();
+    var password = el.candSignupPassword.value || '';
+    if (!email || email.indexOf('@') === -1 || !email.split('@')[1]) {
+      showCandSignupError('Enter a valid email address.');
+      return;
+    }
+    if (password.length < 8) {
+      showCandSignupError('Use at least 8 characters.');
+      return;
+    }
+    el.candSignupBtn.disabled = true;
+    localStorage.setItem(INTENDED_VIEW_KEY, 'candidate');
+    sb.auth.signUp({ email: email, password: password, options: { emailRedirectTo: window.location.origin } }).then(function (result) {
+      el.candSignupBtn.disabled = false;
+      if (result.error) { showCandSignupError(result.error.message); return; }
+      if (result.data.user && result.data.user.identities && result.data.user.identities.length === 0) {
+        showCandSignupError('This email already has an account. Try logging in, or use "Forgot your password" instead.');
+        return;
+      }
+      localStorage.setItem(SIGNUP_PASSWORD_KEY, '1');
+      if (result.data.session) return; // email confirmations off -- onAuthStateChange signs them in
+      state.candidateStage = 'sent';
+      el.candSentEmail.textContent = email;
+      renderShell();
+    });
+  }
+
+  function candidateGotoSignup() {
+    hideCandLoginError();
+    state.candidateStage = 'signup';
+    renderShell();
+  }
+
+  function candidateSignupBackToPassword() {
+    hideCandSignupError();
+    state.candidateStage = 'password';
+    renderShell();
+  }
+
+  el.candSignupPassword.addEventListener('keydown', function (e) { if (e.key === 'Enter') candidateSignUp(); });
+  el.candSignupEmail.addEventListener('keydown', function (e) { if (e.key === 'Enter') candidateSignUp(); });
+  el.candSignupBtn.addEventListener('click', candidateSignUp);
+  el.candGotoSignupBtn.addEventListener('click', candidateGotoSignup);
+  el.candSignupBackToPasswordBtn.addEventListener('click', candidateSignupBackToPassword);
+
   // ---- Candidate: set a password (so future sign-ins skip the email link) ----
   function showCandPasswordError(msg) { el.candPasswordError.textContent = msg; el.candPasswordError.hidden = false; }
   function hideCandPasswordError() { el.candPasswordError.textContent = ''; el.candPasswordError.hidden = true; }
@@ -618,9 +679,14 @@
   }
 
   function finalizeRecruiter() {
-    apiFetch('/api/recruiters/finalize', { method: 'POST', headers: authHeaders() })
+    var justSetPassword = state.justSetPasswordAtSignup;
+    var options = justSetPassword
+      ? { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ justSetPassword: true }) }
+      : { method: 'POST', headers: authHeaders() };
+    apiFetch('/api/recruiters/finalize', options)
       .then(parseJson)
       .then(function (result) {
+        if (justSetPassword) state.justSetPasswordAtSignup = false;
         if (!result.ok) {
           state.email = state.sbEmail || '';
           el.recEmail.value = state.email;
@@ -674,6 +740,53 @@
   el.recLoginBtn.addEventListener('click', recruiterLoginWithPassword);
   el.recUseLinkBtn.addEventListener('click', recruiterShowLinkStage);
   el.recBackToPasswordBtn.addEventListener('click', recruiterShowPasswordStage);
+
+  // ---- Recruiter: create account with work email + password, verified via the same email link ----
+  function showRecSignupError(msg) { el.recSignupError.textContent = msg; el.recSignupError.hidden = false; }
+  function hideRecSignupError() { el.recSignupError.textContent = ''; el.recSignupError.hidden = true; }
+
+  function recruiterSignUp() {
+    hideRecSignupError();
+    var email = (el.recSignupEmail.value || '').trim().toLowerCase();
+    var domain = email.split('@')[1];
+    var password = el.recSignupPassword.value || '';
+    if (!domain || email.indexOf('@') === -1) { showRecSignupError('Enter a valid work email.'); return; }
+    if (isPersonalDomain(domain)) { showRecSignupError('Personal email addresses can’t be verified. Use your company email.'); return; }
+    if (password.length < 8) { showRecSignupError('Use at least 8 characters.'); return; }
+    el.recSignupBtn.disabled = true;
+    localStorage.setItem(INTENDED_VIEW_KEY, 'recruiter');
+    sb.auth.signUp({ email: email, password: password, options: { emailRedirectTo: window.location.origin } }).then(function (result) {
+      el.recSignupBtn.disabled = false;
+      if (result.error) { showRecSignupError(result.error.message); return; }
+      if (result.data.user && result.data.user.identities && result.data.user.identities.length === 0) {
+        showRecSignupError('This email already has an account. Try logging in, or use "Forgot your password" instead.');
+        return;
+      }
+      localStorage.setItem(SIGNUP_PASSWORD_KEY, '1');
+      if (result.data.session) return; // email confirmations off -- onAuthStateChange signs them in
+      state.recStage = 'sent';
+      el.recSentEmail.textContent = email;
+      renderShell();
+    });
+  }
+
+  function recruiterGotoSignup() {
+    hideRecLoginError();
+    state.recStage = 'signup';
+    renderShell();
+  }
+
+  function recruiterSignupBackToPassword() {
+    hideRecSignupError();
+    state.recStage = 'password';
+    renderShell();
+  }
+
+  el.recSignupPassword.addEventListener('keydown', function (e) { if (e.key === 'Enter') recruiterSignUp(); });
+  el.recSignupEmail.addEventListener('keydown', function (e) { if (e.key === 'Enter') recruiterSignUp(); });
+  el.recSignupBtn.addEventListener('click', recruiterSignUp);
+  el.recGotoSignupBtn.addEventListener('click', recruiterGotoSignup);
+  el.recSignupBackToPasswordBtn.addEventListener('click', recruiterSignupBackToPassword);
 
   // ---- Recruiter: set a password (so future sign-ins skip the email link) ----
   function showRecPasswordError(msg) { el.recPasswordError.textContent = msg; el.recPasswordError.hidden = false; }
@@ -893,12 +1006,17 @@
     state.convThreadMessages = [];
     state.passwordSetupDismissedCand = false;
     state.passwordSetupDismissedRec = false;
+    state.justSetPasswordAtSignup = false;
     el.candEmail.value = '';
     el.recEmail.value = '';
     el.candLoginEmail.value = '';
     el.candLoginPassword.value = '';
     el.recLoginEmail.value = '';
     el.recLoginPassword.value = '';
+    el.candSignupEmail.value = '';
+    el.candSignupPassword.value = '';
+    el.recSignupEmail.value = '';
+    el.recSignupPassword.value = '';
     el.candNewPassword.value = '';
     el.recNewPassword.value = '';
     el.detailPanel.innerHTML = '';
@@ -909,6 +1027,8 @@
     hideEmailError();
     hideCandLoginError();
     hideRecLoginError();
+    hideCandSignupError();
+    hideRecSignupError();
     hideCandPasswordError();
     hideRecPasswordError();
     applyProfile({ name: '', employer: '', title: '', desc: '', clients: [], email: '' });
@@ -944,11 +1064,22 @@
       state.convThreadMessages = [];
       state.passwordSetupDismissedCand = false;
       state.passwordSetupDismissedRec = false;
+      state.justSetPasswordAtSignup = false;
       el.detailPanel.innerHTML = '';
       el.convList.innerHTML = '';
       el.convDetailPanel.innerHTML = '';
       closeResumeModal();
       applyProfile({ name: '', employer: '', title: '', desc: '', clients: [], email: '' });
+    }
+
+    if (localStorage.getItem(SIGNUP_PASSWORD_KEY)) {
+      // They just created their password at signup -- the professional/recruiter row
+      // doesn't exist yet at this point, so this can't be a separate flag-it-afterward
+      // call (it would silently no-op against a row that isn't there yet). Instead the
+      // very call that creates the row, just below, is told to mark it has_password
+      // from the start. Consumed once so a later visit to the *other* role isn't affected.
+      localStorage.removeItem(SIGNUP_PASSWORD_KEY);
+      state.justSetPasswordAtSignup = true;
     }
     renderShell();
   }

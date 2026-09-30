@@ -150,19 +150,29 @@
           <label class="field">Password<input id="cand-login-password" type="password" placeholder="Your password"></label>
           <span id="cand-login-error" class="email-error" hidden></span>
           <button id="cand-login-btn" class="btn-dark-pill btn-wide" type="button">Log in</button>
-          <button id="cand-use-link-btn" class="link-btn" type="button">First time here, or forgot your password? Email me a sign-in link</button>
+          <button id="cand-goto-signup-btn" class="link-btn" type="button">New here? Create an account</button>
+          <button id="cand-use-link-btn" class="link-btn" type="button">Forgot your password? Email me a sign-in link</button>
+        </div>
+        <div id="candidate-stage-signup" class="verify-stage" hidden>
+          <h2>Create your account</h2>
+          <p class="verify-desc">Pick a password now, then confirm your email with the link we send. Recruiters can only find you if you list their company.</p>
+          <label class="field">Email<input id="cand-signup-email" type="text" placeholder="you@example.com"></label>
+          <label class="field">Password<input id="cand-signup-password" type="password" placeholder="At least 8 characters"></label>
+          <span id="cand-signup-error" class="email-error" hidden></span>
+          <button id="cand-signup-btn" class="btn-dark-pill btn-wide" type="button">Create account</button>
+          <button id="cand-signup-back-to-password-btn" class="link-btn" type="button">Already have an account? Log in</button>
         </div>
         <div id="candidate-stage-email" class="verify-stage" hidden>
-          <h2>Build your profile</h2>
-          <p class="verify-desc">Enter your email and we'll send a link to create your account or reset your password. Recruiters can only find you if you list their company.</p>
+          <h2>Forgot your password?</h2>
+          <p class="verify-desc">Enter your email and we'll send you a sign-in link. Once you're in, you can set a new password.</p>
           <label class="field">Email<input id="cand-email" type="text" placeholder="you@example.com"></label>
           <span id="cand-email-error" class="email-error" hidden></span>
           <button id="cand-verify-btn" class="btn-dark-pill btn-wide" type="button">Send sign-in link</button>
-          <button id="cand-back-to-password-btn" class="link-btn" type="button">Already have a password? Log in</button>
+          <button id="cand-back-to-password-btn" class="link-btn" type="button">Back to log in</button>
         </div>
         <div id="candidate-stage-sent" class="verify-stage" hidden>
           <h2>Check your email</h2>
-          <p class="verify-desc">We sent a sign-in link to <strong id="cand-sent-email"></strong>. Click it to continue — you can come back to this tab afterward.</p>
+          <p class="verify-desc">We sent a link to <strong id="cand-sent-email"></strong>. Click it to continue — you can come back to this tab afterward.</p>
           <button id="cand-back-to-email-btn" class="link-btn" type="button">Use a different email</button>
         </div>
       </div>
@@ -297,19 +307,29 @@
           <label class="field">Password<input id="rec-login-password" type="password" placeholder="Your password"></label>
           <span id="rec-login-error" class="email-error" hidden></span>
           <button id="rec-login-btn" class="btn-dark-pill btn-wide" type="button">Log in</button>
-          <button id="rec-use-link-btn" class="link-btn" type="button">First time here, or forgot your password? Email me a sign-in link</button>
+          <button id="rec-goto-signup-btn" class="link-btn" type="button">New here? Create an account</button>
+          <button id="rec-use-link-btn" class="link-btn" type="button">Forgot your password? Email me a sign-in link</button>
+        </div>
+        <div id="verify-stage-signup" class="verify-stage" hidden>
+          <h2>Create your recruiter account</h2>
+          <p class="verify-desc">Pick a password now, then confirm your work email with the link we send. You'll see people who list your company, and only your company, on their profile.</p>
+          <label class="field">Work email<input id="rec-signup-email" type="text" placeholder="you@company.com"></label>
+          <label class="field">Password<input id="rec-signup-password" type="password" placeholder="At least 8 characters"></label>
+          <span id="rec-signup-error" class="email-error" hidden></span>
+          <button id="rec-signup-btn" class="btn-dark-pill btn-wide" type="button">Create account</button>
+          <button id="rec-signup-back-to-password-btn" class="link-btn" type="button">Already have an account? Log in</button>
         </div>
         <div id="verify-stage-email" class="verify-stage" hidden>
-          <h2>Verify you recruit for your company</h2>
-          <p class="verify-desc">Use your work email. You'll see people who list your company, and only your company, on their profile.</p>
+          <h2>Forgot your password?</h2>
+          <p class="verify-desc">Enter your work email and we'll send you a sign-in link. Once you're in, you can set a new password.</p>
           <label class="field">Work email<input id="rec-email" type="text" placeholder="you@company.com"></label>
           <span id="email-error" class="email-error" hidden></span>
           <button id="verify-btn" class="btn-dark-pill btn-wide" type="button">Send sign-in link</button>
-          <button id="rec-back-to-password-btn" class="link-btn" type="button">Already have a password? Log in</button>
+          <button id="rec-back-to-password-btn" class="link-btn" type="button">Back to log in</button>
         </div>
         <div id="verify-stage-sent" class="verify-stage" hidden>
           <h2>Check your email</h2>
-          <p class="verify-desc">We sent a sign-in link to <strong id="rec-sent-email"></strong>. Click it to continue — you can come back to this tab afterward.</p>
+          <p class="verify-desc">We sent a link to <strong id="rec-sent-email"></strong>. Click it to continue — you can come back to this tab afterward.</p>
           <button id="back-to-email-btn" class="link-btn" type="button">Use a different email</button>
         </div>
       </div>
