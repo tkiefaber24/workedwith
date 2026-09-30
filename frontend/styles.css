@@ -439,6 +439,32 @@ main.view { flex: 1; }
 }
 .message-compose textarea:focus { outline-color: var(--accent); }
 
+/* Resume preview modal */
+.resume-modal { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.resume-modal-backdrop { position: absolute; inset: 0; background: oklch(0.2 0.02 60 / 0.55); }
+.resume-modal-panel {
+  position: relative; background: var(--surface); border-radius: 16px; box-shadow: var(--shadow-card);
+  width: min(900px, 100%); height: min(85vh, 1000px); display: flex; flex-direction: column; overflow: hidden;
+}
+.resume-modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px; border-bottom: 1px solid var(--border); font-weight: 600;
+}
+.resume-modal-frame { flex: 1; border: 0; width: 100%; background: var(--subtle-fill); }
+
+/* Password-setup nudge card */
+.password-setup-card {
+  border: 1px solid var(--accent-border); background: var(--accent-tint);
+  border-radius: 16px; padding: 18px 20px; display: flex; flex-wrap: wrap;
+  align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px;
+}
+.password-setup-copy { display: flex; flex-direction: column; gap: 4px; min-width: 220px; }
+.password-setup-fields { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.password-setup-fields input {
+  font-size: 14px; padding: 9px 12px; border: 1px solid var(--input-border);
+  border-radius: 10px; background: var(--surface); color: var(--ink); min-width: 180px;
+}
+
 @media (max-width: 720px) {
   .results-body { flex-direction: column; }
 }

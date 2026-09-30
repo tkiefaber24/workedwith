@@ -6,8 +6,10 @@ create table if not exists public.recruiters (
     email text not null,
     domain text not null,
     company text not null,
+    has_password boolean not null default false,
     verified_at timestamptz not null default now()
 );
+alter table public.recruiters add column if not exists has_password boolean not null default false;
 
 create table if not exists public.professionals (
     id bigserial primary key,
@@ -20,12 +22,14 @@ create table if not exists public.professionals (
     resume_path text,
     resume_filename text,
     resume_content_type text,
+    has_password boolean not null default false,
     created_at timestamptz not null default now()
 );
 
 alter table public.professionals add column if not exists resume_path text;
 alter table public.professionals add column if not exists resume_filename text;
 alter table public.professionals add column if not exists resume_content_type text;
+alter table public.professionals add column if not exists has_password boolean not null default false;
 
 create table if not exists public.professional_clients (
     id bigserial primary key,

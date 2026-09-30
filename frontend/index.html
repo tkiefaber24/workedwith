@@ -143,12 +143,22 @@
   <main id="view-candidate" class="view">
     <div id="candidate-gate" class="gate-layout" hidden>
       <div class="verify-col">
-        <div id="candidate-stage-email" class="verify-stage">
+        <div id="candidate-stage-password" class="verify-stage">
+          <h2>Log in</h2>
+          <p class="verify-desc">Sign in to your private profile.</p>
+          <label class="field">Email<input id="cand-login-email" type="text" placeholder="you@example.com"></label>
+          <label class="field">Password<input id="cand-login-password" type="password" placeholder="Your password"></label>
+          <span id="cand-login-error" class="email-error" hidden></span>
+          <button id="cand-login-btn" class="btn-dark-pill btn-wide" type="button">Log in</button>
+          <button id="cand-use-link-btn" class="link-btn" type="button">First time here, or forgot your password? Email me a sign-in link</button>
+        </div>
+        <div id="candidate-stage-email" class="verify-stage" hidden>
           <h2>Build your profile</h2>
-          <p class="verify-desc">Enter your email to create or sign back into your private profile. Recruiters can only find you if you list their company.</p>
+          <p class="verify-desc">Enter your email and we'll send a link to create your account or reset your password. Recruiters can only find you if you list their company.</p>
           <label class="field">Email<input id="cand-email" type="text" placeholder="you@example.com"></label>
           <span id="cand-email-error" class="email-error" hidden></span>
           <button id="cand-verify-btn" class="btn-dark-pill btn-wide" type="button">Send sign-in link</button>
+          <button id="cand-back-to-password-btn" class="link-btn" type="button">Already have a password? Log in</button>
         </div>
         <div id="candidate-stage-sent" class="verify-stage" hidden>
           <h2>Check your email</h2>
@@ -187,6 +197,18 @@
     </div>
 
     <div id="candidate-content" hidden>
+    <div id="candidate-password-setup" class="password-setup-card" hidden>
+      <div class="password-setup-copy">
+        <span class="client-card-title">Set a password</span>
+        <p class="muted-sub">Skip the email link next time you sign in on this device or another one.</p>
+      </div>
+      <div class="password-setup-fields">
+        <input id="cand-new-password" type="password" placeholder="New password" class="client-add-input">
+        <button id="cand-save-password-btn" class="btn-dark-pill" type="button">Save password</button>
+        <button id="cand-skip-password-btn" class="link-btn" type="button">Not now</button>
+      </div>
+      <span id="cand-password-error" class="email-error" hidden></span>
+    </div>
     <div class="candidate-grid">
       <section class="candidate-form">
         <div class="results-head">
@@ -268,12 +290,22 @@
   <main id="view-recruiter-unverified" class="view">
     <div class="gate-layout">
       <div class="verify-col">
-        <div id="verify-stage-email" class="verify-stage">
+        <div id="verify-stage-password" class="verify-stage">
+          <h2>Log in</h2>
+          <p class="verify-desc">Sign in with your verified work email and password.</p>
+          <label class="field">Work email<input id="rec-login-email" type="text" placeholder="you@company.com"></label>
+          <label class="field">Password<input id="rec-login-password" type="password" placeholder="Your password"></label>
+          <span id="rec-login-error" class="email-error" hidden></span>
+          <button id="rec-login-btn" class="btn-dark-pill btn-wide" type="button">Log in</button>
+          <button id="rec-use-link-btn" class="link-btn" type="button">First time here, or forgot your password? Email me a sign-in link</button>
+        </div>
+        <div id="verify-stage-email" class="verify-stage" hidden>
           <h2>Verify you recruit for your company</h2>
           <p class="verify-desc">Use your work email. You'll see people who list your company, and only your company, on their profile.</p>
           <label class="field">Work email<input id="rec-email" type="text" placeholder="you@company.com"></label>
           <span id="email-error" class="email-error" hidden></span>
           <button id="verify-btn" class="btn-dark-pill btn-wide" type="button">Send sign-in link</button>
+          <button id="rec-back-to-password-btn" class="link-btn" type="button">Already have a password? Log in</button>
         </div>
         <div id="verify-stage-sent" class="verify-stage" hidden>
           <h2>Check your email</h2>
@@ -323,11 +355,34 @@
         </div>
       </div>
     </div>
+    <div id="rec-password-setup" class="password-setup-card" hidden>
+      <div class="password-setup-copy">
+        <span class="client-card-title">Set a password</span>
+        <p class="muted-sub">Skip the email link next time you sign in on this device or another one.</p>
+      </div>
+      <div class="password-setup-fields">
+        <input id="rec-new-password" type="password" placeholder="New password" class="client-add-input">
+        <button id="rec-save-password-btn" class="btn-dark-pill" type="button">Save password</button>
+        <button id="rec-skip-password-btn" class="link-btn" type="button">Not now</button>
+      </div>
+      <span id="rec-password-error" class="email-error" hidden></span>
+    </div>
     <div class="results-body">
       <div id="matches-list" class="matches-list"></div>
       <div id="detail-panel" class="detail-panel"></div>
     </div>
   </main>
+
+  <div id="resume-modal" class="resume-modal" hidden>
+    <div id="resume-modal-backdrop" class="resume-modal-backdrop"></div>
+    <div class="resume-modal-panel">
+      <div class="resume-modal-header">
+        <span id="resume-modal-title">Resume</span>
+        <button id="resume-modal-close" class="link-btn" type="button">Close</button>
+      </div>
+      <iframe id="resume-modal-frame" class="resume-modal-frame" title="Resume preview"></iframe>
+    </div>
+  </div>
 
 </div>
 <script src="app.js"></script>

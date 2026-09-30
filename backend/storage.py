@@ -1,7 +1,7 @@
 from supabase_client import get_supabase
 
 RESUME_BUCKET = "resumes"
-SIGNED_URL_TTL_SECONDS = 60
+SIGNED_URL_TTL_SECONDS = 300
 
 ALLOWED_RESUME_MIME = {
     "application/pdf": "pdf",

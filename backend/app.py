@@ -47,7 +47,10 @@ def get_current_user(req):
 # ---- Recruiters ----
 
 def recruiter_json(row):
-    return {"email": row["email"], "company": row["company"], "verifiedAt": row["verified_at"]}
+    return {
+        "email": row["email"], "company": row["company"], "verifiedAt": row["verified_at"],
+        "hasPassword": bool(row.get("has_password")),
+    }
 
 
 @app.route("/api/recruiters/finalize", methods=["POST"])
@@ -153,11 +156,15 @@ def recruiter_match_resume_url(professional_id):
     if not professional_matches_company(professional_id, rec["company"]):
         return jsonify({"error": "Not authorized to view this resume."}), 403
 
-    prof = sb.table("professionals").select("resume_path").eq("id", professional_id).execute().data
+    prof = sb.table("professionals").select("resume_path, resume_content_type") \
+        .eq("id", professional_id).execute().data
     if not prof or not prof[0].get("resume_path"):
         return jsonify({"error": "No resume uploaded."}), 404
 
-    return jsonify({"url": signed_resume_url(prof[0]["resume_path"])})
+    return jsonify({
+        "url": signed_resume_url(prof[0]["resume_path"]),
+        "contentType": prof[0].get("resume_content_type"),
+    })
 
 
 def messages_json(rows):
@@ -223,6 +230,7 @@ def professional_json(row):
         "clients": get_clients(row["id"]),
         "hasResume": bool(row.get("resume_path")),
         "resumeFilename": row.get("resume_filename"),
+        "hasPassword": bool(row.get("has_password")),
     }
 
 
@@ -344,7 +352,10 @@ def professional_resume_url():
     row = get_or_create_professional(user)
     if not row.get("resume_path"):
         return jsonify({"error": "No resume uploaded yet."}), 404
-    return jsonify({"url": signed_resume_url(row["resume_path"])})
+    return jsonify({
+        "url": signed_resume_url(row["resume_path"]),
+        "contentType": row.get("resume_content_type"),
+    })
 
 
 @app.route("/api/professionals/me/conversations", methods=["GET"])
@@ -423,6 +434,20 @@ def professional_send_message(recruiter_id):
         .eq("professional_id", row["id"]).eq("recruiter_id", recruiter_id) \
         .order("created_at").execute().data
     return jsonify({"messages": messages_json(rows)})
+
+
+@app.route("/api/account/password-set", methods=["POST"])
+def account_password_set():
+    """Called after the frontend successfully sets a password via Supabase's own
+    auth.updateUser -- this just flags it on our side so we stop nudging the user
+    to set one. The password itself never passes through this backend."""
+    user = get_current_user(request)
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+    sb = get_supabase()
+    sb.table("professionals").update({"has_password": True}).eq("user_id", user.id).execute()
+    sb.table("recruiters").update({"has_password": True}).eq("user_id", user.id).execute()
+    return jsonify({"ok": True})
 
 
 @app.route("/api/health", methods=["GET"])

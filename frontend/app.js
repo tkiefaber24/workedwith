@@ -43,35 +43,42 @@
 
   var state = {
     view: 'landing',
-    me: { name: '', employer: '', title: '', desc: '', clients: [] },
+    me: { name: '', employer: '', title: '', desc: '', clients: [], hasPassword: false },
     sbToken: null, sbEmail: null,
     recruiterChecked: false, professionalLoaded: false,
-    candidateLoggedIn: false, candidateStage: 'email', candidateEmail: '',
+    candidateLoggedIn: false, candidateStage: 'password', candidateEmail: '',
     newCo: '', previewIdx: 0,
-    email: '', recStage: 'email',
+    email: '', recStage: 'password', recHasPassword: false,
     recCompany: null, selectedId: null, matches: [],
     threadForId: null, threadMessages: [],
-    conversations: [], convSelectedId: null, convThreadForId: null, convThreadMessages: []
+    conversations: [], convSelectedId: null, convThreadForId: null, convThreadMessages: [],
+    passwordSetupDismissedCand: false, passwordSetupDismissedRec: false
   };
 
   var el = {};
   ['logo-btn', 'tab-candidate', 'tab-recruiter', 'card-candidate', 'card-recruiter',
     'view-landing', 'view-candidate', 'view-recruiter-unverified', 'view-recruiter-verified',
-    'candidate-gate', 'candidate-content', 'candidate-stage-email', 'candidate-stage-sent',
-    'cand-email', 'cand-email-error', 'cand-verify-btn',
+    'candidate-gate', 'candidate-content',
+    'candidate-stage-password', 'candidate-stage-email', 'candidate-stage-sent',
+    'cand-login-email', 'cand-login-password', 'cand-login-error', 'cand-login-btn', 'cand-use-link-btn',
+    'cand-email', 'cand-email-error', 'cand-verify-btn', 'cand-back-to-password-btn',
     'cand-sent-email', 'cand-back-to-email-btn',
     'candidate-signed-in-as', 'candidate-sign-out-btn',
     'candidate-account-trigger', 'candidate-account-dropdown',
+    'candidate-password-setup', 'cand-new-password', 'cand-save-password-btn', 'cand-skip-password-btn', 'cand-password-error',
     'me-name', 'me-employer', 'me-title', 'me-desc',
     'client-rows', 'new-co', 'add-client-btn',
     'resume-status', 'resume-view-link', 'resume-file-input', 'resume-upload-btn', 'resume-error',
     'preview-chips', 'preview-area',
     'conv-list', 'conv-detail-panel',
-    'verify-stage-email', 'verify-stage-sent',
-    'rec-email', 'email-error', 'verify-btn',
+    'resume-modal', 'resume-modal-backdrop', 'resume-modal-title', 'resume-modal-close', 'resume-modal-frame',
+    'verify-stage-password', 'verify-stage-email', 'verify-stage-sent',
+    'rec-login-email', 'rec-login-password', 'rec-login-error', 'rec-login-btn', 'rec-use-link-btn',
+    'rec-email', 'email-error', 'verify-btn', 'rec-back-to-password-btn',
     'rec-sent-email', 'back-to-email-btn',
     'results-heading', 'results-count', 'results-email', 'sign-out-btn',
     'recruiter-account-trigger', 'recruiter-account-dropdown',
+    'rec-password-setup', 'rec-new-password', 'rec-save-password-btn', 'rec-skip-password-btn', 'rec-password-error',
     'matches-list', 'detail-panel'
   ].forEach(function (id) { el[id.replace(/-([a-z])/g, function (_, c) { return c.toUpperCase(); })] = document.getElementById(id); });
 
@@ -92,12 +99,16 @@
 
     el.candidateGate.hidden = state.candidateLoggedIn;
     el.candidateContent.hidden = !state.candidateLoggedIn;
+    el.candidateStagePassword.hidden = state.candidateStage !== 'password';
     el.candidateStageEmail.hidden = state.candidateStage !== 'email';
     el.candidateStageSent.hidden = state.candidateStage !== 'sent';
     if (state.candidateLoggedIn) el.candidateSignedInAs.textContent = 'Signed in as ' + state.candidateEmail;
+    el.candidatePasswordSetup.hidden = !(state.candidateLoggedIn && !state.me.hasPassword && !state.passwordSetupDismissedCand);
 
+    el.verifyStagePassword.hidden = state.recStage !== 'password';
     el.verifyStageEmail.hidden = state.recStage !== 'email';
     el.verifyStageSent.hidden = state.recStage !== 'sent';
+    el.recPasswordSetup.hidden = !(recruiterVerified && !state.recHasPassword && !state.passwordSetupDismissedRec);
 
     if (state.view === 'candidate' && state.sbToken && !state.candidateLoggedIn && !state.professionalLoaded) {
       state.professionalLoaded = true;
@@ -177,7 +188,8 @@
   function applyProfile(profile) {
     state.me = {
       name: profile.name, employer: profile.employer, title: profile.title, desc: profile.desc,
-      clients: profile.clients, hasResume: !!profile.hasResume, resumeFilename: profile.resumeFilename || ''
+      clients: profile.clients, hasResume: !!profile.hasResume, resumeFilename: profile.resumeFilename || '',
+      hasPassword: !!profile.hasPassword
     };
     state.candidateEmail = profile.email || state.candidateEmail;
     if (state.previewIdx >= state.me.clients.length) state.previewIdx = state.me.clients.length - 1;
@@ -229,10 +241,32 @@
       .then(parseJson)
       .then(function (result) {
         if (!result.ok) { showResumeError(result.data.error || 'Could not open resume.'); return; }
-        window.open(result.data.url, '_blank');
+        openResume(result.data.url, result.data.contentType, state.me.resumeFilename || 'Your resume');
       })
       .catch(function (err) { showResumeError(err.message); });
   }
+
+  // ---- Resume preview modal (PDFs render inline; other types open in a new tab) ----
+  function openResume(url, contentType, title) {
+    if (contentType === 'application/pdf') {
+      el.resumeModalTitle.textContent = title || 'Resume';
+      el.resumeModalFrame.src = url;
+      el.resumeModal.hidden = false;
+    } else {
+      window.open(url, '_blank');
+    }
+  }
+
+  function closeResumeModal() {
+    el.resumeModal.hidden = true;
+    el.resumeModalFrame.src = 'about:blank';
+  }
+
+  el.resumeModalClose.addEventListener('click', closeResumeModal);
+  el.resumeModalBackdrop.addEventListener('click', closeResumeModal);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !el.resumeModal.hidden) closeResumeModal();
+  });
 
   el.resumeUploadBtn.addEventListener('click', function () { el.resumeFileInput.click(); });
   el.resumeFileInput.addEventListener('change', function () {
@@ -475,6 +509,73 @@
   el.candBackToEmailBtn.addEventListener('click', candidateBackToEmail);
   el.candidateSignOutBtn.addEventListener('click', signOutEverywhere);
 
+  // ---- Candidate: password login (returning users who've already set one) ----
+  function showCandLoginError(msg) { el.candLoginError.textContent = msg; el.candLoginError.hidden = false; }
+  function hideCandLoginError() { el.candLoginError.textContent = ''; el.candLoginError.hidden = true; }
+
+  function candidateLoginWithPassword() {
+    hideCandLoginError();
+    var email = (el.candLoginEmail.value || '').trim().toLowerCase();
+    var password = el.candLoginPassword.value || '';
+    if (!email || !password) { showCandLoginError('Enter your email and password.'); return; }
+    el.candLoginBtn.disabled = true;
+    sb.auth.signInWithPassword({ email: email, password: password }).then(function (result) {
+      el.candLoginBtn.disabled = false;
+      if (result.error) { showCandLoginError('Incorrect email or password.'); return; }
+      // onAuthStateChange picks up the new session and signs the user in.
+    });
+  }
+
+  function candidateShowLinkStage() {
+    hideCandLoginError();
+    state.candidateStage = 'email';
+    renderShell();
+  }
+
+  function candidateShowPasswordStage() {
+    hideCandEmailError();
+    state.candidateStage = 'password';
+    renderShell();
+  }
+
+  el.candLoginPassword.addEventListener('keydown', function (e) { if (e.key === 'Enter') candidateLoginWithPassword(); });
+  el.candLoginEmail.addEventListener('keydown', function (e) { if (e.key === 'Enter') candidateLoginWithPassword(); });
+  el.candLoginBtn.addEventListener('click', candidateLoginWithPassword);
+  el.candUseLinkBtn.addEventListener('click', candidateShowLinkStage);
+  el.candBackToPasswordBtn.addEventListener('click', candidateShowPasswordStage);
+
+  // ---- Candidate: set a password (so future sign-ins skip the email link) ----
+  function showCandPasswordError(msg) { el.candPasswordError.textContent = msg; el.candPasswordError.hidden = false; }
+  function hideCandPasswordError() { el.candPasswordError.textContent = ''; el.candPasswordError.hidden = true; }
+
+  function saveCandPassword() {
+    hideCandPasswordError();
+    var pw = el.candNewPassword.value || '';
+    if (pw.length < 8) { showCandPasswordError('Use at least 8 characters.'); return; }
+    el.candSavePasswordBtn.disabled = true;
+    sb.auth.updateUser({ password: pw }).then(function (result) {
+      if (result.error) throw new Error(result.error.message);
+      return apiFetch('/api/account/password-set', { method: 'POST', headers: authHeaders() });
+    }).then(function () {
+      el.candSavePasswordBtn.disabled = false;
+      el.candNewPassword.value = '';
+      state.me.hasPassword = true;
+      renderShell();
+    }).catch(function (err) {
+      el.candSavePasswordBtn.disabled = false;
+      showCandPasswordError(err.message);
+    });
+  }
+
+  function skipCandPassword() {
+    state.passwordSetupDismissedCand = true;
+    renderShell();
+  }
+
+  el.candSavePasswordBtn.addEventListener('click', saveCandPassword);
+  el.candNewPassword.addEventListener('keydown', function (e) { if (e.key === 'Enter') saveCandPassword(); });
+  el.candSkipPasswordBtn.addEventListener('click', skipCandPassword);
+
   // ---- Recruiter: verify gate (Supabase email magic link, work email only) ----
   function showEmailError(msg) { el.emailError.textContent = msg; el.emailError.hidden = false; }
   function hideEmailError() { el.emailError.textContent = ''; el.emailError.hidden = true; }
@@ -510,6 +611,7 @@
         if (data.__missing) return finalizeRecruiter();
         state.email = data.email;
         state.recCompany = data.company;
+        state.recHasPassword = !!data.hasPassword;
         renderShell();
       })
       .catch(function (err) { console.error(err); });
@@ -527,6 +629,7 @@
         }
         state.email = result.data.email;
         state.recCompany = result.data.company;
+        state.recHasPassword = !!result.data.hasPassword;
         renderShell();
       })
       .catch(function (err) { console.error(err); });
@@ -536,6 +639,73 @@
   el.recEmail.addEventListener('keydown', function (e) { if (e.key === 'Enter') requestLink(); });
   el.verifyBtn.addEventListener('click', requestLink);
   el.backToEmailBtn.addEventListener('click', backToEmail);
+
+  // ---- Recruiter: password login (returning users who've already set one) ----
+  function showRecLoginError(msg) { el.recLoginError.textContent = msg; el.recLoginError.hidden = false; }
+  function hideRecLoginError() { el.recLoginError.textContent = ''; el.recLoginError.hidden = true; }
+
+  function recruiterLoginWithPassword() {
+    hideRecLoginError();
+    var email = (el.recLoginEmail.value || '').trim().toLowerCase();
+    var password = el.recLoginPassword.value || '';
+    if (!email || !password) { showRecLoginError('Enter your email and password.'); return; }
+    el.recLoginBtn.disabled = true;
+    sb.auth.signInWithPassword({ email: email, password: password }).then(function (result) {
+      el.recLoginBtn.disabled = false;
+      if (result.error) { showRecLoginError('Incorrect email or password.'); return; }
+      // onAuthStateChange picks up the new session and signs the user in.
+    });
+  }
+
+  function recruiterShowLinkStage() {
+    hideRecLoginError();
+    state.recStage = 'email';
+    renderShell();
+  }
+
+  function recruiterShowPasswordStage() {
+    hideEmailError();
+    state.recStage = 'password';
+    renderShell();
+  }
+
+  el.recLoginPassword.addEventListener('keydown', function (e) { if (e.key === 'Enter') recruiterLoginWithPassword(); });
+  el.recLoginEmail.addEventListener('keydown', function (e) { if (e.key === 'Enter') recruiterLoginWithPassword(); });
+  el.recLoginBtn.addEventListener('click', recruiterLoginWithPassword);
+  el.recUseLinkBtn.addEventListener('click', recruiterShowLinkStage);
+  el.recBackToPasswordBtn.addEventListener('click', recruiterShowPasswordStage);
+
+  // ---- Recruiter: set a password (so future sign-ins skip the email link) ----
+  function showRecPasswordError(msg) { el.recPasswordError.textContent = msg; el.recPasswordError.hidden = false; }
+  function hideRecPasswordError() { el.recPasswordError.textContent = ''; el.recPasswordError.hidden = true; }
+
+  function saveRecPassword() {
+    hideRecPasswordError();
+    var pw = el.recNewPassword.value || '';
+    if (pw.length < 8) { showRecPasswordError('Use at least 8 characters.'); return; }
+    el.recSavePasswordBtn.disabled = true;
+    sb.auth.updateUser({ password: pw }).then(function (result) {
+      if (result.error) throw new Error(result.error.message);
+      return apiFetch('/api/account/password-set', { method: 'POST', headers: authHeaders() });
+    }).then(function () {
+      el.recSavePasswordBtn.disabled = false;
+      el.recNewPassword.value = '';
+      state.recHasPassword = true;
+      renderShell();
+    }).catch(function (err) {
+      el.recSavePasswordBtn.disabled = false;
+      showRecPasswordError(err.message);
+    });
+  }
+
+  function skipRecPassword() {
+    state.passwordSetupDismissedRec = true;
+    renderShell();
+  }
+
+  el.recSavePasswordBtn.addEventListener('click', saveRecPassword);
+  el.recNewPassword.addEventListener('keydown', function (e) { if (e.key === 'Enter') saveRecPassword(); });
+  el.recSkipPasswordBtn.addEventListener('click', skipRecPassword);
 
   // ---- Recruiter: results ----
   function loadAndRenderResults() {
@@ -618,7 +788,7 @@
 
     var resumeLinkBtn = document.getElementById('resume-link-btn');
     if (resumeLinkBtn) {
-      resumeLinkBtn.addEventListener('click', function () { viewMatchResume(selP.id); });
+      resumeLinkBtn.addEventListener('click', function () { viewMatchResume(selP.id, selP.name); });
     }
     renderMessageList();
     document.getElementById('message-send-btn').addEventListener('click', function () { sendMessage(selP.id); });
@@ -629,12 +799,12 @@
     if (isNewSelection) loadThread(selP.id);
   }
 
-  function viewMatchResume(professionalId) {
+  function viewMatchResume(professionalId, name) {
     apiFetch('/api/recruiters/matches/' + professionalId + '/resume-url', { headers: authHeaders() })
       .then(parseJson)
       .then(function (result) {
         if (!result.ok) { console.error(result.data.error); return; }
-        window.open(result.data.url, '_blank');
+        openResume(result.data.url, result.data.contentType, name ? name + '’s resume' : 'Resume');
       })
       .catch(function (err) { console.error(err); });
   }
@@ -706,12 +876,13 @@
     state.recruiterChecked = false;
     state.professionalLoaded = false;
     state.candidateLoggedIn = false;
-    state.candidateStage = 'email';
+    state.candidateStage = 'password';
     state.candidateEmail = '';
     state.previewIdx = 0;
     state.recCompany = null;
     state.email = '';
-    state.recStage = 'email';
+    state.recStage = 'password';
+    state.recHasPassword = false;
     state.selectedId = null;
     state.matches = [];
     state.threadForId = null;
@@ -720,13 +891,26 @@
     state.convSelectedId = null;
     state.convThreadForId = null;
     state.convThreadMessages = [];
+    state.passwordSetupDismissedCand = false;
+    state.passwordSetupDismissedRec = false;
     el.candEmail.value = '';
     el.recEmail.value = '';
+    el.candLoginEmail.value = '';
+    el.candLoginPassword.value = '';
+    el.recLoginEmail.value = '';
+    el.recLoginPassword.value = '';
+    el.candNewPassword.value = '';
+    el.recNewPassword.value = '';
     el.detailPanel.innerHTML = '';
     el.convList.innerHTML = '';
     el.convDetailPanel.innerHTML = '';
+    closeResumeModal();
     hideCandEmailError();
     hideEmailError();
+    hideCandLoginError();
+    hideRecLoginError();
+    hideCandPasswordError();
+    hideRecPasswordError();
     applyProfile({ name: '', employer: '', title: '', desc: '', clients: [], email: '' });
   }
 
@@ -749,6 +933,7 @@
       state.candidateLoggedIn = false;
       state.recCompany = null;
       state.email = '';
+      state.recHasPassword = false;
       state.selectedId = null;
       state.matches = [];
       state.threadForId = null;
@@ -757,9 +942,12 @@
       state.convSelectedId = null;
       state.convThreadForId = null;
       state.convThreadMessages = [];
+      state.passwordSetupDismissedCand = false;
+      state.passwordSetupDismissedRec = false;
       el.detailPanel.innerHTML = '';
       el.convList.innerHTML = '';
       el.convDetailPanel.innerHTML = '';
+      closeResumeModal();
       applyProfile({ name: '', employer: '', title: '', desc: '', clients: [], email: '' });
     }
     renderShell();
