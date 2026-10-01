@@ -452,6 +452,14 @@ main.view { flex: 1; }
   padding: 14px 18px; border-bottom: 1px solid var(--border); font-weight: 600;
 }
 .resume-modal-frame { flex: 1; border: 0; width: 100%; background: var(--subtle-fill); }
+.resume-modal-docx {
+  flex: 1; width: 100%; overflow: auto; background: var(--subtle-fill); padding: 24px;
+}
+.resume-modal-docx .docx-loading, .resume-modal-docx .docx-error {
+  display: flex; align-items: center; justify-content: center; height: 100%;
+  color: var(--muted); text-align: center; padding: 0 24px;
+}
+.resume-modal-docx .docx-wrapper { background: none; }
 
 /* Password-setup nudge card */
 .password-setup-card {

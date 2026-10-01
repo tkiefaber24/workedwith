@@ -76,7 +76,7 @@
     'resume-status', 'resume-view-link', 'resume-file-input', 'resume-upload-btn', 'resume-error',
     'preview-chips', 'preview-area',
     'conv-list', 'conv-detail-panel',
-    'resume-modal', 'resume-modal-backdrop', 'resume-modal-title', 'resume-modal-close', 'resume-modal-frame',
+    'resume-modal', 'resume-modal-backdrop', 'resume-modal-title', 'resume-modal-close', 'resume-modal-frame', 'resume-modal-docx',
     'verify-stage-password', 'verify-stage-signup', 'verify-stage-email', 'verify-stage-sent',
     'rec-login-email', 'rec-login-password', 'rec-login-error', 'rec-login-btn',
     'rec-goto-signup-btn', 'rec-use-link-btn',
@@ -278,20 +278,64 @@
       .catch(function (err) { showResumeError(err.message); });
   }
 
-  // ---- Resume preview modal (PDFs render directly; Word docs render via Office's viewer) ----
+  // ---- Resume preview modal (PDFs render directly in an iframe; Word docs render
+  // client-side with docx-preview, since third-party doc viewers are unreliable
+  // with short-lived signed URLs and often fall back to a forced download) ----
+  var docxLibPromise = null;
+  function loadDocxPreviewLib() {
+    if (docxLibPromise) return docxLibPromise;
+    docxLibPromise = new Promise(function (resolve, reject) {
+      var jszip = document.createElement('script');
+      jszip.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+      jszip.onload = function () {
+        var docxPreview = document.createElement('script');
+        docxPreview.src = 'https://cdn.jsdelivr.net/npm/docx-preview@0.3.0/dist/docx-preview.min.js';
+        docxPreview.onload = resolve;
+        docxPreview.onerror = reject;
+        document.head.appendChild(docxPreview);
+      };
+      jszip.onerror = reject;
+      document.head.appendChild(jszip);
+    });
+    return docxLibPromise;
+  }
+
   function openResume(url, contentType, title) {
     el.resumeModalTitle.textContent = title || 'Resume';
-    if (contentType === 'application/pdf') {
-      el.resumeModalFrame.src = url;
-    } else {
-      el.resumeModalFrame.src = 'https://view.officeapps.live.com/op/embed.aspx?src=' + encodeURIComponent(url);
-    }
     el.resumeModal.hidden = false;
+    if (contentType === 'application/pdf') {
+      el.resumeModalDocx.hidden = true;
+      el.resumeModalDocx.innerHTML = '';
+      el.resumeModalFrame.hidden = false;
+      el.resumeModalFrame.src = url;
+      return;
+    }
+
+    el.resumeModalFrame.hidden = true;
+    el.resumeModalFrame.src = 'about:blank';
+    el.resumeModalDocx.hidden = false;
+    el.resumeModalDocx.innerHTML = '<div class="docx-loading">Loading preview…</div>';
+
+    loadDocxPreviewLib()
+      .then(function () { return fetch(url); })
+      .then(function (res) {
+        if (!res.ok) throw new Error('Could not load the document.');
+        return res.blob();
+      })
+      .then(function (blob) {
+        el.resumeModalDocx.innerHTML = '';
+        return window.docx.renderAsync(blob, el.resumeModalDocx);
+      })
+      .catch(function () {
+        el.resumeModalDocx.innerHTML = '<div class="docx-error">Couldn’t preview this document. ' +
+          '<a href="' + esc(url) + '" target="_blank" rel="noopener">Open it in a new tab</a> instead.</div>';
+      });
   }
 
   function closeResumeModal() {
     el.resumeModal.hidden = true;
     el.resumeModalFrame.src = 'about:blank';
+    el.resumeModalDocx.innerHTML = '';
   }
 
   el.resumeModalClose.addEventListener('click', closeResumeModal);
