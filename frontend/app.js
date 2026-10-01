@@ -69,7 +69,9 @@
     'cand-email', 'cand-email-error', 'cand-verify-btn', 'cand-back-to-password-btn',
     'cand-sent-email', 'cand-back-to-email-btn',
     'candidate-signed-in-as', 'candidate-sign-out-btn',
-    'candidate-account-trigger', 'candidate-account-dropdown',
+    'candidate-account-menu', 'candidate-account-trigger', 'candidate-account-dropdown',
+    'candidate-edit-profile-btn', 'candidate-hide-toggle-btn',
+    'candidate-delete-account-btn', 'candidate-delete-confirm', 'candidate-delete-confirm-btn', 'candidate-delete-cancel-btn',
     'candidate-password-setup', 'cand-new-password', 'cand-save-password-btn', 'cand-skip-password-btn', 'cand-password-error',
     'me-name', 'me-employer', 'me-title', 'me-desc',
     'client-rows', 'new-co', 'add-client-btn',
@@ -77,6 +79,7 @@
     'preview-chips', 'preview-area',
     'conv-list', 'conv-detail-panel',
     'resume-modal', 'resume-modal-backdrop', 'resume-modal-title', 'resume-modal-close', 'resume-modal-frame', 'resume-modal-docx',
+    'profile-modal', 'profile-modal-backdrop', 'profile-modal-close',
     'verify-stage-password', 'verify-stage-signup', 'verify-stage-email', 'verify-stage-sent',
     'rec-login-email', 'rec-login-password', 'rec-login-error', 'rec-login-btn',
     'rec-goto-signup-btn', 'rec-use-link-btn',
@@ -84,7 +87,8 @@
     'rec-email', 'email-error', 'verify-btn', 'rec-back-to-password-btn',
     'rec-sent-email', 'back-to-email-btn',
     'results-heading', 'results-count', 'results-email', 'sign-out-btn',
-    'recruiter-account-trigger', 'recruiter-account-dropdown',
+    'recruiter-account-menu', 'recruiter-account-trigger', 'recruiter-account-dropdown',
+    'recruiter-delete-account-btn', 'recruiter-delete-confirm', 'recruiter-delete-confirm-btn', 'recruiter-delete-cancel-btn',
     'rec-password-setup', 'rec-new-password', 'rec-save-password-btn', 'rec-skip-password-btn', 'rec-password-error',
     'matches-list', 'detail-panel'
   ].forEach(function (id) { el[id.replace(/-([a-z])/g, function (_, c) { return c.toUpperCase(); })] = document.getElementById(id); });
@@ -125,6 +129,8 @@
     document.getElementById('view-recruiter-verified').classList.toggle('active', recruiterVerified);
     el.tabCandidate.classList.toggle('active', state.view === 'candidate');
     el.tabRecruiter.classList.toggle('active', state.view === 'recruiter');
+    el.candidateAccountMenu.hidden = !(state.view === 'candidate' && state.candidateLoggedIn);
+    el.recruiterAccountMenu.hidden = !recruiterVerified;
 
     if (waitingOnAuthCheck) return;
 
@@ -210,11 +216,15 @@
       '<p class="preview-note">' + note + '</p>';
   }
 
+  function renderHideToggleLabel() {
+    el.candidateHideToggleBtn.textContent = state.me.hidden ? 'Unhide from matching' : 'Hide from matching';
+  }
+
   function applyProfile(profile) {
     state.me = {
       name: profile.name, employer: profile.employer, title: profile.title, desc: profile.desc,
       clients: profile.clients, hasResume: !!profile.hasResume, resumeFilename: profile.resumeFilename || '',
-      hasPassword: !!profile.hasPassword
+      hasPassword: !!profile.hasPassword, hidden: !!profile.hidden
     };
     state.candidateEmail = profile.email || state.candidateEmail;
     // Default to the first company whenever the current index is out of range --
@@ -230,6 +240,7 @@
     renderPreviewChips();
     renderPreviewArea();
     renderResumeStatus();
+    renderHideToggleLabel();
   }
 
   // ---- Candidate: resume upload/view ----
@@ -342,7 +353,59 @@
   el.resumeModalBackdrop.addEventListener('click', closeResumeModal);
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && !el.resumeModal.hidden) closeResumeModal();
+    if (e.key === 'Escape' && !el.profileModal.hidden) closeProfileModal();
   });
+
+  // ---- Candidate: edit profile modal ----
+  function openProfileModal() {
+    closeAllDropdowns();
+    el.profileModal.hidden = false;
+  }
+  function closeProfileModal() { el.profileModal.hidden = true; }
+  el.candidateEditProfileBtn.addEventListener('click', openProfileModal);
+  el.profileModalClose.addEventListener('click', closeProfileModal);
+  el.profileModalBackdrop.addEventListener('click', closeProfileModal);
+
+  // ---- Candidate: hide from matching ----
+  function toggleHiddenFromMatching() {
+    var next = !state.me.hidden;
+    el.candidateHideToggleBtn.disabled = true;
+    apiFetch('/api/professionals/me', {
+      method: 'PUT',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ hidden: next })
+    })
+      .then(parseJson)
+      .then(function (result) {
+        el.candidateHideToggleBtn.disabled = false;
+        if (!result.ok) return;
+        applyProfile(result.data);
+      })
+      .catch(function (err) { el.candidateHideToggleBtn.disabled = false; console.error(err); });
+  }
+  el.candidateHideToggleBtn.addEventListener('click', toggleHiddenFromMatching);
+
+  // ---- Delete account (shared by both roles -- removes the auth account entirely) ----
+  function wireDeleteAccount(deleteBtn, confirmBox, confirmBtn, cancelBtn) {
+    deleteBtn.addEventListener('click', function () { confirmBox.hidden = false; });
+    cancelBtn.addEventListener('click', function () { confirmBox.hidden = true; });
+    confirmBtn.addEventListener('click', function () {
+      confirmBtn.disabled = true;
+      apiFetch('/api/account', { method: 'DELETE', headers: authHeaders() })
+        .then(parseJson)
+        .then(function () { return sb.auth.signOut(); })
+        .then(function () {
+          resetSignedOutState();
+          renderShell();
+        })
+        .catch(function (err) {
+          confirmBtn.disabled = false;
+          console.error(err);
+        });
+    });
+  }
+  wireDeleteAccount(el.candidateDeleteAccountBtn, el.candidateDeleteConfirm, el.candidateDeleteConfirmBtn, el.candidateDeleteCancelBtn);
+  wireDeleteAccount(el.recruiterDeleteAccountBtn, el.recruiterDeleteConfirm, el.recruiterDeleteConfirmBtn, el.recruiterDeleteCancelBtn);
 
   el.resumeUploadBtn.addEventListener('click', function () { el.resumeFileInput.click(); });
   el.resumeFileInput.addEventListener('change', function () {
@@ -1109,6 +1172,7 @@
     el.convList.innerHTML = '';
     el.convDetailPanel.innerHTML = '';
     closeResumeModal();
+    closeProfileModal();
     hideCandEmailError();
     hideEmailError();
     hideCandLoginError();
@@ -1157,6 +1221,7 @@
       el.convList.innerHTML = '';
       el.convDetailPanel.innerHTML = '';
       closeResumeModal();
+      closeProfileModal();
       applyProfile({ name: '', employer: '', title: '', desc: '', clients: [], email: '' });
     }
 
@@ -1217,20 +1282,22 @@
   }, 5000);
 
   // ---- Account dropdown menus ----
+  function closeAllDropdowns() {
+    document.querySelectorAll('.account-dropdown').forEach(function (d) { d.hidden = true; });
+    document.querySelectorAll('.account-delete-confirm').forEach(function (c) { c.hidden = true; });
+  }
   function setupAccountMenu(trigger, dropdown) {
     trigger.addEventListener('click', function (e) {
       e.stopPropagation();
       var willOpen = dropdown.hidden;
-      document.querySelectorAll('.account-dropdown').forEach(function (d) { d.hidden = true; });
+      closeAllDropdowns();
       dropdown.hidden = !willOpen;
     });
     dropdown.addEventListener('click', function (e) { e.stopPropagation(); });
   }
   setupAccountMenu(el.candidateAccountTrigger, el.candidateAccountDropdown);
   setupAccountMenu(el.recruiterAccountTrigger, el.recruiterAccountDropdown);
-  document.addEventListener('click', function () {
-    document.querySelectorAll('.account-dropdown').forEach(function (d) { d.hidden = true; });
-  });
+  document.addEventListener('click', closeAllDropdowns);
 
   // ---- Navigation wiring ----
   el.logoBtn.addEventListener('click', function () { goTo('landing'); });

@@ -6,7 +6,7 @@ from flask_cors import CORS
 
 from auth import parse_work_email, get_bearer_token
 from supabase_client import get_supabase
-from storage import ALLOWED_RESUME_MIME, MAX_RESUME_BYTES, upload_resume, signed_resume_url
+from storage import ALLOWED_RESUME_MIME, MAX_RESUME_BYTES, upload_resume, signed_resume_url, delete_resume
 import os
 
 load_dotenv()
@@ -127,7 +127,8 @@ def recruiter_matches():
     contacted_ids = set()
     matches = []
     if ordered_ids:
-        profs = sb.table("professionals").select("*").in_("id", ordered_ids).execute().data
+        profs = sb.table("professionals").select("*").in_("id", ordered_ids) \
+            .eq("hidden_from_matching", False).execute().data
         by_id = {p["id"]: p for p in profs}
         msgs = sb.table("messages").select("professional_id").eq("recruiter_id", rec["id"]) \
             .in_("professional_id", ordered_ids).execute().data
@@ -237,6 +238,7 @@ def professional_json(row):
         "hasResume": bool(row.get("resume_path")),
         "resumeFilename": row.get("resume_filename"),
         "hasPassword": bool(row.get("has_password")),
+        "hidden": bool(row.get("hidden_from_matching")),
     }
 
 
@@ -277,6 +279,8 @@ def professional_update():
     for key, column in (("name", "name"), ("employer", "employer"), ("title", "title"), ("desc", "description")):
         if key in body:
             fields[column] = str(body[key])[:2000]
+    if "hidden" in body:
+        fields["hidden_from_matching"] = bool(body["hidden"])
 
     if fields:
         sb = get_supabase()
@@ -457,6 +461,24 @@ def account_password_set():
     sb = get_supabase()
     sb.table("professionals").update({"has_password": True}).eq("user_id", user.id).execute()
     sb.table("recruiters").update({"has_password": True}).eq("user_id", user.id).execute()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/account", methods=["DELETE"])
+def delete_account():
+    """Permanently deletes the signed-in user's auth account. Postgres foreign
+    keys (professionals/recruiters -> auth.users, and professional_clients/
+    messages -> those) are all `on delete cascade`, so deleting the auth user
+    alone removes every row tied to them. Only the resume file in storage
+    needs cleaning up by hand, since storage isn't part of that FK chain."""
+    user = get_current_user(request)
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+    sb = get_supabase()
+    prof = sb.table("professionals").select("resume_path").eq("user_id", user.id).execute().data
+    if prof and prof[0].get("resume_path"):
+        delete_resume(prof[0]["resume_path"])
+    sb.auth.admin.delete_user(user.id)
     return jsonify({"ok": True})
 
 

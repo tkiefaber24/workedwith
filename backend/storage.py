@@ -27,3 +27,7 @@ def signed_resume_url(path):
     result = get_supabase().storage.from_(RESUME_BUCKET) \
         .create_signed_url(path, SIGNED_URL_TTL_SECONDS)
     return result.get("signedURL") or result.get("signedUrl") or result.get("signed_url")
+
+
+def delete_resume(path):
+    get_supabase().storage.from_(RESUME_BUCKET).remove([path])

@@ -30,6 +30,7 @@ alter table public.professionals add column if not exists resume_path text;
 alter table public.professionals add column if not exists resume_filename text;
 alter table public.professionals add column if not exists resume_content_type text;
 alter table public.professionals add column if not exists has_password boolean not null default false;
+alter table public.professionals add column if not exists hidden_from_matching boolean not null default false;
 
 create table if not exists public.professional_clients (
     id bigserial primary key,

@@ -20,9 +20,49 @@
       <span class="logo-ring"><span class="logo-dot"></span></span>
       <span class="wordmark">Workedwith</span>
     </button>
-    <div class="pill-toggle">
-      <button id="tab-candidate" class="pill-btn" type="button">I'm a professional</button>
-      <button id="tab-recruiter" class="pill-btn" type="button">I'm a recruiter</button>
+    <div class="header-right">
+      <div class="pill-toggle">
+        <button id="tab-candidate" class="pill-btn" type="button">I'm a professional</button>
+        <button id="tab-recruiter" class="pill-btn" type="button">I'm a recruiter</button>
+      </div>
+      <div id="candidate-account-menu" class="account-menu" hidden>
+        <button id="candidate-account-trigger" class="account-trigger account-trigger-plain" type="button">
+          <span id="candidate-signed-in-as" class="account-email"></span>
+          <svg class="account-chevron" width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div id="candidate-account-dropdown" class="account-dropdown" hidden>
+          <button id="candidate-edit-profile-btn" class="account-dropdown-item" type="button">Edit profile</button>
+          <button id="candidate-hide-toggle-btn" class="account-dropdown-item" type="button">Hide from matching</button>
+          <button id="candidate-sign-out-btn" class="account-dropdown-item" type="button">Sign out</button>
+          <div class="account-dropdown-divider"></div>
+          <button id="candidate-delete-account-btn" class="account-dropdown-item account-dropdown-danger" type="button">Delete account</button>
+          <div id="candidate-delete-confirm" class="account-delete-confirm" hidden>
+            <p>Permanently delete your account and profile? This can't be undone.</p>
+            <div class="account-delete-confirm-actions">
+              <button id="candidate-delete-confirm-btn" class="account-dropdown-item account-dropdown-danger" type="button">Yes, delete</button>
+              <button id="candidate-delete-cancel-btn" class="account-dropdown-item" type="button">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="recruiter-account-menu" class="account-menu" hidden>
+        <button id="recruiter-account-trigger" class="account-trigger verified-pill" type="button">
+          <span class="verified-dot"></span>Verified · <span id="results-email"></span>
+          <svg class="account-chevron" width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div id="recruiter-account-dropdown" class="account-dropdown" hidden>
+          <button id="sign-out-btn" class="account-dropdown-item" type="button">Sign out</button>
+          <div class="account-dropdown-divider"></div>
+          <button id="recruiter-delete-account-btn" class="account-dropdown-item account-dropdown-danger" type="button">Delete account</button>
+          <div id="recruiter-delete-confirm" class="account-delete-confirm" hidden>
+            <p>Permanently delete your account? This can't be undone.</p>
+            <div class="account-delete-confirm-actions">
+              <button id="recruiter-delete-confirm-btn" class="account-dropdown-item account-dropdown-danger" type="button">Yes, delete</button>
+              <button id="recruiter-delete-cancel-btn" class="account-dropdown-item" type="button">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -226,22 +266,7 @@
             <h2>Your profile</h2>
             <p class="muted-sub">Visible only to verified recruiters from companies on your list.</p>
           </div>
-          <div class="account-menu">
-            <button id="candidate-account-trigger" class="account-trigger account-trigger-plain" type="button">
-              <span id="candidate-signed-in-as" class="account-email"></span>
-              <svg class="account-chevron" width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </button>
-            <div id="candidate-account-dropdown" class="account-dropdown" hidden>
-              <button id="candidate-sign-out-btn" class="account-dropdown-item" type="button">Sign out</button>
-            </div>
-          </div>
         </div>
-        <div class="field-row">
-          <label class="field">Name<input id="me-name" type="text"></label>
-          <label class="field">Employer<input id="me-employer" type="text"></label>
-        </div>
-        <label class="field">Title<input id="me-title" type="text"></label>
-        <label class="field">What you do, in general terms<textarea id="me-desc" rows="4"></textarea></label>
 
         <div class="client-card">
           <div class="client-card-header">
@@ -365,15 +390,6 @@
         <h2 id="results-heading">People who work with</h2>
         <p id="results-count" class="muted-sub"></p>
       </div>
-      <div class="account-menu">
-        <button id="recruiter-account-trigger" class="account-trigger verified-pill" type="button">
-          <span class="verified-dot"></span>Verified · <span id="results-email"></span>
-          <svg class="account-chevron" width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <div id="recruiter-account-dropdown" class="account-dropdown" hidden>
-          <button id="sign-out-btn" class="account-dropdown-item" type="button">Sign out</button>
-        </div>
-      </div>
     </div>
     <div id="rec-password-setup" class="password-setup-card" hidden>
       <div class="password-setup-copy">
@@ -398,6 +414,24 @@
   <main id="view-loading" class="view view-loading">
     <p class="muted-sub">Loading…</p>
   </main>
+
+  <div id="profile-modal" class="resume-modal" hidden>
+    <div id="profile-modal-backdrop" class="resume-modal-backdrop"></div>
+    <div class="resume-modal-panel profile-modal-panel">
+      <div class="resume-modal-header">
+        <span>Edit profile</span>
+        <button id="profile-modal-close" class="link-btn" type="button">Close</button>
+      </div>
+      <div class="profile-modal-body">
+        <div class="field-row">
+          <label class="field">Name<input id="me-name" type="text"></label>
+          <label class="field">Employer<input id="me-employer" type="text"></label>
+        </div>
+        <label class="field">Title<input id="me-title" type="text"></label>
+        <label class="field">What you do, in general terms<textarea id="me-desc" rows="4"></textarea></label>
+      </div>
+    </div>
+  </div>
 
   <div id="resume-modal" class="resume-modal" hidden>
     <div id="resume-modal-backdrop" class="resume-modal-backdrop"></div>
