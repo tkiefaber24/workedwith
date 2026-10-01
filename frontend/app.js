@@ -311,21 +311,54 @@
     return docxLibPromise;
   }
 
-  function openResume(url, contentType, title) {
-    el.resumeModalTitle.textContent = title || 'Resume';
-    el.resumeModal.hidden = false;
+  // docx-preview renders at the document's actual page width (e.g. 816px for
+  // 8.5in), which usually overflows a narrower preview panel. Scale the whole
+  // rendered page down to fit, and collapse the layout space the transform
+  // leaves behind (it doesn't shrink the element's box, just its paint).
+  function fitDocxToContainer(docxEl) {
+    var wrapper = docxEl.querySelector('.docx-wrapper');
+    var page = docxEl.querySelector('.docx-wrapper section.docx');
+    if (!wrapper || !page) return;
+    var containerWidth = docxEl.clientWidth;
+    // Measure the actual page, not the wrapper -- the wrapper centers its
+    // (overflowing) page via flexbox, which makes its own scrollWidth/
+    // offsetWidth under-report how wide the page really is. The wrapper's
+    // own left/right padding sits outside the page and gets scaled right
+    // along with it, so it has to be counted too or the result still clips.
+    var wrapperStyle = window.getComputedStyle(wrapper);
+    var paddingX = (parseFloat(wrapperStyle.paddingLeft) || 0) + (parseFloat(wrapperStyle.paddingRight) || 0);
+    var naturalWidth = page.offsetWidth + paddingX;
+    if (!naturalWidth || naturalWidth <= containerWidth) return;
+    // The wrapper's own box otherwise stays clamped to the container's width
+    // and flex-centers the oversized page around that -- scaling never
+    // actually closes that gap since it shrinks the overflow proportionally
+    // rather than eliminating it. Forcing the wrapper to its natural width
+    // first removes the overflow outright; the scale below then shrinks the
+    // whole (now non-overflowing) page to fit.
+    wrapper.style.width = naturalWidth + 'px';
+    var naturalHeight = wrapper.scrollHeight;
+    var scale = containerWidth / naturalWidth;
+    wrapper.style.transformOrigin = 'top left';
+    wrapper.style.transform = 'scale(' + scale + ')';
+    wrapper.style.marginBottom = (naturalHeight * (scale - 1)) + 'px';
+  }
+
+  // Shared by the candidate's own resume modal and the recruiter's inline
+  // preview: fetches a signed resume URL into whichever frame/container pair
+  // it's given.
+  function renderResumeInto(frameEl, docxEl, url, contentType) {
     if (contentType === 'application/pdf') {
-      el.resumeModalDocx.hidden = true;
-      el.resumeModalDocx.innerHTML = '';
-      el.resumeModalFrame.hidden = false;
-      el.resumeModalFrame.src = url;
+      docxEl.hidden = true;
+      docxEl.innerHTML = '';
+      frameEl.hidden = false;
+      frameEl.src = url;
       return;
     }
 
-    el.resumeModalFrame.hidden = true;
-    el.resumeModalFrame.src = 'about:blank';
-    el.resumeModalDocx.hidden = false;
-    el.resumeModalDocx.innerHTML = '<div class="docx-loading">Loading preview…</div>';
+    frameEl.hidden = true;
+    frameEl.src = 'about:blank';
+    docxEl.hidden = false;
+    docxEl.innerHTML = '<div class="docx-loading">Loading preview…</div>';
 
     loadDocxPreviewLib()
       .then(function () { return fetch(url); })
@@ -334,13 +367,20 @@
         return res.blob();
       })
       .then(function (blob) {
-        el.resumeModalDocx.innerHTML = '';
-        return window.docx.renderAsync(blob, el.resumeModalDocx);
+        docxEl.innerHTML = '';
+        return window.docx.renderAsync(blob, docxEl);
       })
+      .then(function () { fitDocxToContainer(docxEl); })
       .catch(function () {
-        el.resumeModalDocx.innerHTML = '<div class="docx-error">Couldn’t preview this document. ' +
+        docxEl.innerHTML = '<div class="docx-error">Couldn’t preview this document. ' +
           '<a href="' + esc(url) + '" target="_blank" rel="noopener">Open it in a new tab</a> instead.</div>';
       });
+  }
+
+  function openResume(url, contentType, title) {
+    el.resumeModalTitle.textContent = title || 'Resume';
+    el.resumeModal.hidden = false;
+    renderResumeInto(el.resumeModalFrame, el.resumeModalDocx, url, contentType);
   }
 
   function closeResumeModal() {
@@ -1060,7 +1100,6 @@
         '<span class="avatar avatar-blue detail-avatar">' + esc(initials(selP.name)) + '</span>' +
         '<div class="detail-name"><span class="name-serif">' + esc(selP.name) + '</span>' +
         '<span class="sub">' + esc(selP.title) + ' at <strong>' + esc(selP.employer) + '</strong></span></div>' +
-        (selP.hasResume ? '<button class="link-btn" type="button" id="resume-link-btn">View resume</button>' : '') +
       '</div>' +
       '<p class="detail-desc">' + esc(selP.desc) + '</p>' +
       '<div class="works-with-section">' +
@@ -1068,6 +1107,14 @@
         '<div class="works-with-box-lg detail-works-box"><span class="works-with-title">' + esc(selP.matchCompany) +
           ' <span class="works-with-you">· your company</span></span></div>' +
       '</div>' +
+      (selP.hasResume ?
+        '<div class="works-with-section">' +
+          '<span class="label-caps">Resume</span>' +
+          '<div class="inline-resume">' +
+            '<iframe id="inline-resume-frame" class="inline-resume-frame" title="Resume preview" hidden></iframe>' +
+            '<div id="inline-resume-docx" class="inline-resume-docx" hidden></div>' +
+          '</div>' +
+        '</div>' : '') +
       '<div class="works-with-section">' +
         '<span class="label-caps">Message ' + esc((selP.name || '').split(/\s+/)[0] || selP.name) + '</span>' +
         '<div id="message-list" class="message-list"></div>' +
@@ -1077,10 +1124,7 @@
         '</div>' +
       '</div>';
 
-    var resumeLinkBtn = document.getElementById('resume-link-btn');
-    if (resumeLinkBtn) {
-      resumeLinkBtn.addEventListener('click', function () { viewMatchResume(selP.id, selP.name); });
-    }
+    if (selP.hasResume && isNewSelection) loadInlineResume(selP.id);
     renderMessageList();
     document.getElementById('message-send-btn').addEventListener('click', function () { sendMessage(selP.id); });
     document.getElementById('message-input').addEventListener('keydown', function (e) {
@@ -1090,14 +1134,26 @@
     if (isNewSelection) loadThread(selP.id);
   }
 
-  function viewMatchResume(professionalId, name) {
+  function loadInlineResume(professionalId) {
+    var frameEl = document.getElementById('inline-resume-frame');
+    var docxEl = document.getElementById('inline-resume-docx');
+    if (!frameEl || !docxEl) return;
+    docxEl.hidden = false;
+    docxEl.innerHTML = '<div class="docx-loading">Loading resume…</div>';
     apiFetch('/api/recruiters/matches/' + professionalId + '/resume-url' + recCompanyOverrideParam(), { headers: authHeaders() })
       .then(parseJson)
       .then(function (result) {
-        if (!result.ok) { console.error(result.data.error); return; }
-        openResume(result.data.url, result.data.contentType, name ? name + '’s resume' : 'Resume');
+        if (state.threadForId !== professionalId) return; // selection moved on before this resolved
+        if (!result.ok) {
+          docxEl.innerHTML = '<div class="docx-error">' + esc(result.data.error || 'Could not load resume.') + '</div>';
+          return;
+        }
+        renderResumeInto(frameEl, docxEl, result.data.url, result.data.contentType);
       })
-      .catch(function (err) { console.error(err); });
+      .catch(function () {
+        if (state.threadForId !== professionalId) return;
+        docxEl.innerHTML = '<div class="docx-error">Could not load resume.</div>';
+      });
   }
 
   function renderMessageList() {
