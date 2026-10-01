@@ -278,15 +278,15 @@
       .catch(function (err) { showResumeError(err.message); });
   }
 
-  // ---- Resume preview modal (PDFs render inline; other types open in a new tab) ----
+  // ---- Resume preview modal (PDFs render directly; Word docs render via Office's viewer) ----
   function openResume(url, contentType, title) {
+    el.resumeModalTitle.textContent = title || 'Resume';
     if (contentType === 'application/pdf') {
-      el.resumeModalTitle.textContent = title || 'Resume';
       el.resumeModalFrame.src = url;
-      el.resumeModal.hidden = false;
     } else {
-      window.open(url, '_blank');
+      el.resumeModalFrame.src = 'https://view.officeapps.live.com/op/embed.aspx?src=' + encodeURIComponent(url);
     }
+    el.resumeModal.hidden = false;
   }
 
   function closeResumeModal() {
