@@ -217,7 +217,14 @@
       hasPassword: !!profile.hasPassword
     };
     state.candidateEmail = profile.email || state.candidateEmail;
-    if (state.previewIdx >= state.me.clients.length) state.previewIdx = state.me.clients.length - 1;
+    // Default to the first company whenever the current index is out of range --
+    // not just clamped down from above. Signing out calls this with an empty
+    // clients array first (clamping previewIdx to -1), and without a lower-bound
+    // check too, it would stay stuck at -1 forever once real data loads back in,
+    // permanently showing the empty-state placeholder instead of the first company.
+    if (state.previewIdx < 0 || state.previewIdx >= state.me.clients.length) {
+      state.previewIdx = 0;
+    }
     syncCandidateForm();
     renderClientRows();
     renderPreviewChips();
