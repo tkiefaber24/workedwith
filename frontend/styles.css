@@ -48,6 +48,7 @@ input, textarea, button { font-family: inherit; }
 .view { display: none; }
 .view.active { display: block; }
 main.view { flex: 1; }
+.view-loading.active { display: flex; align-items: center; justify-content: center; min-height: 40vh; }
 
 /* Header */
 .site-header {

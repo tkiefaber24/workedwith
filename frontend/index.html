@@ -393,6 +393,12 @@
     </div>
   </main>
 
+  <!-- Shown briefly while we check for an existing signed-in session, so the
+       login gate never flashes on screen only to be replaced a moment later. -->
+  <main id="view-loading" class="view view-loading">
+    <p class="muted-sub">Loading…</p>
+  </main>
+
   <div id="resume-modal" class="resume-modal" hidden>
     <div id="resume-modal-backdrop" class="resume-modal-backdrop"></div>
     <div class="resume-modal-panel">

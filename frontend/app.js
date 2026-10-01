@@ -54,7 +54,8 @@
     threadForId: null, threadMessages: [],
     conversations: [], convSelectedId: null, convThreadForId: null, convThreadMessages: [],
     passwordSetupDismissedCand: false, passwordSetupDismissedRec: false,
-    justSetPasswordAtSignup: false
+    justSetPasswordAtSignup: false, authChecked: false,
+    professionalCheckDone: false, recruiterCheckDone: false
   };
 
   var el = {};
@@ -94,14 +95,38 @@
   }
 
   function renderShell() {
-    document.getElementById('view-landing').classList.toggle('active', state.view === 'landing');
-    document.getElementById('view-candidate').classList.toggle('active', state.view === 'candidate');
-    var recruiterUnverified = state.view === 'recruiter' && !state.recCompany;
-    var recruiterVerified = state.view === 'recruiter' && !!state.recCompany;
+    // Kick off the lazy profile/recruiter checks as soon as we have a token for
+    // this view. Safe to call on every render: these guards only let the
+    // underlying fetch fire once, so re-running this is a no-op once in flight.
+    if (state.view === 'candidate' && state.sbToken && !state.candidateLoggedIn && !state.professionalLoaded) {
+      state.professionalLoaded = true;
+      loadProfessionalProfile();
+    }
+    if (state.view === 'recruiter' && state.sbToken && !state.recCompany && !state.recruiterChecked) {
+      state.recruiterChecked = true;
+      loadOrFinalizeRecruiter();
+    }
+
+    // Until we know for sure whether this person is already signed in -- and,
+    // if so, until our own backend has confirmed their profile/recruiter
+    // status -- never show the login gate. Otherwise it flashes on screen and
+    // then gets silently replaced once the check resolves, which looks exactly
+    // like "I typed my email and got logged in with no password."
+    var checkingCandidate = state.view === 'candidate' && state.sbToken && !state.professionalCheckDone;
+    var checkingRecruiter = state.view === 'recruiter' && state.sbToken && !state.recruiterCheckDone;
+    var waitingOnAuthCheck = (state.view === 'candidate' || state.view === 'recruiter') &&
+      (!state.authChecked || checkingCandidate || checkingRecruiter);
+    document.getElementById('view-loading').classList.toggle('active', waitingOnAuthCheck);
+    document.getElementById('view-landing').classList.toggle('active', !waitingOnAuthCheck && state.view === 'landing');
+    document.getElementById('view-candidate').classList.toggle('active', !waitingOnAuthCheck && state.view === 'candidate');
+    var recruiterUnverified = !waitingOnAuthCheck && state.view === 'recruiter' && !state.recCompany;
+    var recruiterVerified = !waitingOnAuthCheck && state.view === 'recruiter' && !!state.recCompany;
     document.getElementById('view-recruiter-unverified').classList.toggle('active', recruiterUnverified);
     document.getElementById('view-recruiter-verified').classList.toggle('active', recruiterVerified);
     el.tabCandidate.classList.toggle('active', state.view === 'candidate');
     el.tabRecruiter.classList.toggle('active', state.view === 'recruiter');
+
+    if (waitingOnAuthCheck) return;
 
     el.candidateGate.hidden = state.candidateLoggedIn;
     el.candidateContent.hidden = !state.candidateLoggedIn;
@@ -118,14 +143,6 @@
     el.verifyStageSent.hidden = state.recStage !== 'sent';
     el.recPasswordSetup.hidden = !(recruiterVerified && !state.recHasPassword && !state.passwordSetupDismissedRec);
 
-    if (state.view === 'candidate' && state.sbToken && !state.candidateLoggedIn && !state.professionalLoaded) {
-      state.professionalLoaded = true;
-      loadProfessionalProfile();
-    }
-    if (state.view === 'recruiter' && state.sbToken && !state.recCompany && !state.recruiterChecked) {
-      state.recruiterChecked = true;
-      loadOrFinalizeRecruiter();
-    }
     if (recruiterVerified) loadAndRenderResults();
   }
 
@@ -419,14 +436,19 @@
     apiFetch('/api/professionals/me' + qs, { headers: authHeaders() })
       .then(function (res) { return res.ok ? res.json() : null; })
       .then(function (data) {
-        if (!data) return;
+        state.professionalCheckDone = true;
+        if (!data) { renderShell(); return; }
         state.justSetPasswordAtSignup = false;
         state.candidateLoggedIn = true;
         applyProfile(data);
         loadConversations();
         renderShell();
       })
-      .catch(function (err) { console.error(err); });
+      .catch(function (err) {
+        console.error(err);
+        state.professionalCheckDone = true;
+        renderShell();
+      });
   }
 
   function updateProfileField(field, value) {
@@ -670,12 +692,17 @@
       .then(function (res) { return res.ok ? res.json() : { __missing: true }; })
       .then(function (data) {
         if (data.__missing) return finalizeRecruiter();
+        state.recruiterCheckDone = true;
         state.email = data.email;
         state.recCompany = data.company;
         state.recHasPassword = !!data.hasPassword;
         renderShell();
       })
-      .catch(function (err) { console.error(err); });
+      .catch(function (err) {
+        console.error(err);
+        state.recruiterCheckDone = true;
+        renderShell();
+      });
   }
 
   function finalizeRecruiter() {
@@ -687,10 +714,12 @@
       .then(parseJson)
       .then(function (result) {
         if (justSetPassword) state.justSetPasswordAtSignup = false;
+        state.recruiterCheckDone = true;
         if (!result.ok) {
           state.email = state.sbEmail || '';
           el.recEmail.value = state.email;
           showEmailError(result.data.error || 'Verify a work email to see recruiter results.');
+          renderShell();
           return;
         }
         state.email = result.data.email;
@@ -698,7 +727,11 @@
         state.recHasPassword = !!result.data.hasPassword;
         renderShell();
       })
-      .catch(function (err) { console.error(err); });
+      .catch(function (err) {
+        console.error(err);
+        state.recruiterCheckDone = true;
+        renderShell();
+      });
   }
 
   el.recEmail.addEventListener('input', function () { state.email = el.recEmail.value; hideEmailError(); });
@@ -988,6 +1021,8 @@
     state.sbEmail = null;
     state.recruiterChecked = false;
     state.professionalLoaded = false;
+    state.professionalCheckDone = false;
+    state.recruiterCheckDone = false;
     state.candidateLoggedIn = false;
     state.candidateStage = 'password';
     state.candidateEmail = '';
@@ -1050,6 +1085,8 @@
       // different email on the other tab's gate) -- clear stale per-identity state.
       state.recruiterChecked = false;
       state.professionalLoaded = false;
+      state.professionalCheckDone = false;
+      state.recruiterCheckDone = false;
       state.candidateLoggedIn = false;
       state.recCompany = null;
       state.email = '';
@@ -1092,13 +1129,23 @@
   }
 
   sb.auth.onAuthStateChange(function (event, session) {
+    var firstCheck = !state.authChecked;
+    state.authChecked = true;
     if (session && session.access_token !== state.sbToken) {
       onSignedIn(session);
     } else if (!session && state.sbToken) {
       resetSignedOutState();
       renderShell();
+    } else if (firstCheck) {
+      renderShell(); // nothing changed, but the loading state needs to clear now
     }
   });
+
+  // Safety net: if the session check never fires for some reason (e.g. a
+  // blocked request), don't leave the user stuck on "Loading..." forever.
+  setTimeout(function () {
+    if (!state.authChecked) { state.authChecked = true; renderShell(); }
+  }, 5000);
 
   // ---- Account dropdown menus ----
   function setupAccountMenu(trigger, dropdown) {
