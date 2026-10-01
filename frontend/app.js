@@ -50,7 +50,7 @@
     candidateLoggedIn: false, candidateStage: 'password', candidateEmail: '',
     newCo: '', previewIdx: 0,
     email: '', recStage: 'password', recHasPassword: false,
-    recCompany: null, selectedId: null, matches: [],
+    recCompany: null, recCompanyOptions: null, selectedId: null, matches: [],
     threadForId: null, threadMessages: [],
     conversations: [], convSelectedId: null, convThreadForId: null, convThreadMessages: [],
     passwordSetupDismissedCand: false, passwordSetupDismissedRec: false,
@@ -86,7 +86,7 @@
     'rec-signup-email', 'rec-signup-password', 'rec-signup-error', 'rec-signup-btn', 'rec-signup-back-to-password-btn',
     'rec-email', 'email-error', 'verify-btn', 'rec-back-to-password-btn',
     'rec-sent-email', 'back-to-email-btn',
-    'results-heading', 'results-count', 'results-email', 'sign-out-btn',
+    'results-heading', 'results-count', 'results-email', 'sign-out-btn', 'rec-company-switcher',
     'recruiter-account-menu', 'recruiter-account-trigger', 'recruiter-account-dropdown',
     'recruiter-delete-account-btn', 'recruiter-delete-confirm', 'recruiter-delete-confirm-btn', 'recruiter-delete-cancel-btn',
     'rec-password-setup', 'rec-new-password', 'rec-save-password-btn', 'rec-skip-password-btn', 'rec-password-error',
@@ -808,7 +808,8 @@
         if (data.__missing) return finalizeRecruiter();
         state.recruiterCheckDone = true;
         state.email = data.email;
-        state.recCompany = data.company;
+        state.recCompanyOptions = data.companies || null;
+        state.recCompany = (state.recCompanyOptions && state.recCompanyOptions[0]) || data.company;
         state.recHasPassword = !!data.hasPassword;
         renderShell();
       })
@@ -837,7 +838,8 @@
           return;
         }
         state.email = result.data.email;
-        state.recCompany = result.data.company;
+        state.recCompanyOptions = result.data.companies || null;
+        state.recCompany = (state.recCompanyOptions && state.recCompanyOptions[0]) || result.data.company;
         state.recHasPassword = !!result.data.hasPassword;
         renderShell();
       })
@@ -968,10 +970,39 @@
   el.recSkipPasswordBtn.addEventListener('click', skipRecPassword);
 
   // ---- Recruiter: results ----
+  // Demo-only: a recruiter verified on the special sbcglobal.net test domain can
+  // switch between a fixed list of companies instead of being locked to one.
+  // This query param is ignored server-side for every other recruiter.
+  function recCompanyOverrideParam() {
+    return state.recCompanyOptions ? '?company=' + encodeURIComponent(state.recCompany) : '';
+  }
+
+  function renderRecCompanySwitcher() {
+    if (!state.recCompanyOptions) { el.recCompanySwitcher.hidden = true; return; }
+    el.recCompanySwitcher.hidden = false;
+    el.recCompanySwitcher.innerHTML = state.recCompanyOptions.map(function (c) {
+      return '<button class="pill-btn' + (c === state.recCompany ? ' active' : '') + '" type="button" data-company="' + esc(c) + '">' + esc(c) + '</button>';
+    }).join('');
+    Array.prototype.forEach.call(el.recCompanySwitcher.querySelectorAll('.pill-btn'), function (btn) {
+      btn.addEventListener('click', function () { switchRecCompany(btn.getAttribute('data-company')); });
+    });
+  }
+
+  function switchRecCompany(company) {
+    if (company === state.recCompany) return;
+    state.recCompany = company;
+    state.selectedId = null;
+    state.threadForId = null;
+    state.threadMessages = [];
+    renderRecCompanySwitcher();
+    loadAndRenderResults();
+  }
+
   function loadAndRenderResults() {
     el.resultsHeading.textContent = 'People who work with ' + state.recCompany;
     el.resultsEmail.textContent = state.email;
-    apiFetch('/api/recruiters/matches', { headers: authHeaders() })
+    renderRecCompanySwitcher();
+    apiFetch('/api/recruiters/matches' + recCompanyOverrideParam(), { headers: authHeaders() })
       .then(parseJson)
       .then(function (result) {
         state.matches = result.ok ? result.data.matches : [];
@@ -1060,7 +1091,7 @@
   }
 
   function viewMatchResume(professionalId, name) {
-    apiFetch('/api/recruiters/matches/' + professionalId + '/resume-url', { headers: authHeaders() })
+    apiFetch('/api/recruiters/matches/' + professionalId + '/resume-url' + recCompanyOverrideParam(), { headers: authHeaders() })
       .then(parseJson)
       .then(function (result) {
         if (!result.ok) { console.error(result.data.error); return; }
@@ -1083,7 +1114,7 @@
   }
 
   function loadThread(professionalId) {
-    apiFetch('/api/recruiters/matches/' + professionalId + '/messages', { headers: authHeaders() })
+    apiFetch('/api/recruiters/matches/' + professionalId + '/messages' + recCompanyOverrideParam(), { headers: authHeaders() })
       .then(parseJson)
       .then(function (result) {
         if (state.threadForId !== professionalId) return;
@@ -1106,7 +1137,7 @@
     apiFetch('/api/recruiters/matches/' + professionalId + '/messages', {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ body: text })
+      body: JSON.stringify(state.recCompanyOptions ? { body: text, company: state.recCompany } : { body: text })
     })
       .then(parseJson)
       .then(function (result) {
@@ -1142,6 +1173,7 @@
     state.candidateEmail = '';
     state.previewIdx = 0;
     state.recCompany = null;
+    state.recCompanyOptions = null;
     state.email = '';
     state.recStage = 'password';
     state.recHasPassword = false;
@@ -1204,6 +1236,7 @@
       state.recruiterCheckDone = false;
       state.candidateLoggedIn = false;
       state.recCompany = null;
+      state.recCompanyOptions = null;
       state.email = '';
       state.recHasPassword = false;
       state.selectedId = null;

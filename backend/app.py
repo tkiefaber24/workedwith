@@ -46,11 +46,31 @@ def get_current_user(req):
 
 # ---- Recruiters ----
 
+# Demo/test exception: this one specific recruiter account can switch between
+# a fixed list of companies instead of being locked to one derived from their
+# email. Keyed by the exact email, not the domain, so this can never become a
+# general way for a real recruiter to view a company they didn't actually verify.
+DEMO_RECRUITER_COMPANIES = {
+    "tkster8@sbcglobal.net": ["Stripe", "Apple"],
+}
+
+
 def recruiter_json(row):
     return {
         "email": row["email"], "company": row["company"], "verifiedAt": row["verified_at"],
         "hasPassword": bool(row.get("has_password")),
+        "companies": DEMO_RECRUITER_COMPANIES.get(row.get("email")),
     }
+
+
+def effective_company(rec, requested_company):
+    """The company to act as for this request -- normally always the
+    recruiter's own verified company, except for a demo account, which may
+    request any company from its fixed allowed list."""
+    allowed = DEMO_RECRUITER_COMPANIES.get(rec.get("email"))
+    if allowed and requested_company in allowed:
+        return requested_company
+    return rec["company"]
 
 
 @app.route("/api/recruiters/finalize", methods=["POST"])
@@ -111,7 +131,7 @@ def recruiter_matches():
     rec = get_verified_recruiter(user)
     if not rec:
         return jsonify({"error": "Not a verified recruiter yet."}), 404
-    company = rec["company"]
+    company = effective_company(rec, request.args.get("company"))
 
     clients = sb.table("professional_clients").select("professional_id, company") \
         .ilike("company", company.strip()).execute().data
@@ -160,7 +180,7 @@ def recruiter_match_resume_url(professional_id):
 
     # Only allow this if the professional actually lists the recruiter's company --
     # same privacy rule as /matches, enforced again here since this is a separate route.
-    if not professional_matches_company(professional_id, rec["company"]):
+    if not professional_matches_company(professional_id, effective_company(rec, request.args.get("company"))):
         return jsonify({"error": "Not authorized to view this resume."}), 403
 
     prof = sb.table("professionals").select("resume_path, resume_content_type") \
@@ -186,7 +206,7 @@ def recruiter_thread_messages(professional_id):
     rec = get_verified_recruiter(user)
     if not rec:
         return jsonify({"error": "Not a verified recruiter yet."}), 404
-    if not professional_matches_company(professional_id, rec["company"]):
+    if not professional_matches_company(professional_id, effective_company(rec, request.args.get("company"))):
         return jsonify({"error": "Not authorized to message this person."}), 403
 
     rows = get_supabase().table("messages").select("*") \
@@ -203,10 +223,10 @@ def recruiter_send_message(professional_id):
     rec = get_verified_recruiter(user)
     if not rec:
         return jsonify({"error": "Not a verified recruiter yet."}), 404
-    if not professional_matches_company(professional_id, rec["company"]):
+    body = request.get_json(silent=True) or {}
+    if not professional_matches_company(professional_id, effective_company(rec, body.get("company"))):
         return jsonify({"error": "Not authorized to message this person."}), 403
 
-    body = request.get_json(silent=True) or {}
     text = (body.get("body") or "").strip()[:4000]
     if not text:
         return jsonify({"error": "Message can't be empty."}), 400
