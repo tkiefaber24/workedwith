@@ -1128,20 +1128,38 @@
     });
   }
 
-  sb.auth.onAuthStateChange(function (event, session) {
-    var firstCheck = !state.authChecked;
+  // getSession() is Supabase's own recommended way to get a *definitive*
+  // answer on page load -- unlike the first onAuthStateChange event, it
+  // internally waits out any pending token refresh (an expired access token
+  // with a still-valid refresh token) before resolving. Relying on the first
+  // onAuthStateChange event instead let a premature "no session" answer
+  // through while that refresh was still in flight, which is exactly what
+  // caused the login gate to flash before flipping to signed-in.
+  sb.auth.getSession().then(function (result) {
     state.authChecked = true;
+    var session = result.data && result.data.session;
+    if (session) {
+      onSignedIn(session);
+    } else {
+      renderShell();
+    }
+  }).catch(function (err) {
+    console.error(err);
+    state.authChecked = true;
+    renderShell();
+  });
+
+  sb.auth.onAuthStateChange(function (event, session) {
+    if (!state.authChecked) return; // the getSession() call above owns the first resolution
     if (session && session.access_token !== state.sbToken) {
       onSignedIn(session);
     } else if (!session && state.sbToken) {
       resetSignedOutState();
       renderShell();
-    } else if (firstCheck) {
-      renderShell(); // nothing changed, but the loading state needs to clear now
     }
   });
 
-  // Safety net: if the session check never fires for some reason (e.g. a
+  // Safety net: if getSession() never resolves for some reason (e.g. a
   // blocked request), don't leave the user stuck on "Loading..." forever.
   setTimeout(function () {
     if (!state.authChecked) { state.authChecked = true; renderShell(); }
