@@ -322,11 +322,17 @@
         var style = window.getComputedStyle(container);
         var paddingX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
         var targetWidth = container.clientWidth - paddingX;
+        // Render at the screen's actual pixel density, not just the target
+        // CSS width -- on a high-DPI display, a canvas sized 1:1 to CSS
+        // pixels gets stretched to cover extra physical pixels and turns
+        // soft. The CSS (width: 100%) still scales the element down to the
+        // same on-screen size either way, so this only adds sharpness.
+        var dpr = window.devicePixelRatio || 1;
         var chain = Promise.resolve();
         var renderPage = function (pageNum) {
           return pdfDoc.getPage(pageNum).then(function (page) {
             var baseViewport = page.getViewport({ scale: 1 });
-            var viewport = page.getViewport({ scale: targetWidth / baseViewport.width });
+            var viewport = page.getViewport({ scale: (targetWidth * dpr) / baseViewport.width });
             var canvas = document.createElement('canvas');
             canvas.className = 'pdf-page-canvas';
             canvas.width = viewport.width;
@@ -1145,6 +1151,7 @@
           '<span class="avatar avatar-neutral">' + esc(initials(p.name)) + '</span>' +
           '<span class="match-row-name"><span>' + esc(p.name) + '</span>' +
           '<span class="match-row-sub">' + esc(p.title) + ' · ' + esc(p.employer) + '</span></span>' +
+          (p.hasResume ? '<span class="match-has-resume"><span class="match-has-resume-dot"></span>Resume</span>' : '') +
           (p.contacted ? '<span class="match-contacted">Contacted</span>' : '') +
           '</button>';
       }).join('');
@@ -1214,26 +1221,45 @@
     if (isNewSelection) loadThread(selP.id);
   }
 
-  function loadInlineResume(professionalId) {
+  var inlineResumeRequestSeq = 0;
+  function loadInlineResume(professionalId, isRetry) {
     var frameEl = document.getElementById('inline-resume-frame');
     var docxEl = document.getElementById('inline-resume-docx');
     if (!frameEl || !docxEl) return;
+    // renderResultsBody() calls this on every render of the same person, not
+    // just a new selection (so the preview still loads after an unrelated
+    // re-render) -- which means a company switch or quick re-render can have
+    // two requests for the same person in flight at once. Whichever resolves
+    // LAST wins unconditionally, so a stale, earlier failure could overwrite
+    // a result that had already loaded successfully. A strictly increasing
+    // request id, checked at resolution time, makes only the most recent
+    // request for anyone actually allowed to touch the DOM.
+    var requestId = ++inlineResumeRequestSeq;
+    if (!isRetry) docxEl.innerHTML = '<div class="docx-loading">Loading resume…</div>';
     docxEl.hidden = false;
-    docxEl.innerHTML = '<div class="docx-loading">Loading resume…</div>';
+
+    // One retry before giving up on a failed fetch (either a thrown network
+    // error, or a non-2xx response like a transient 500) -- usually just a
+    // momentary blip, not a real failure.
+    function handleFailure(message) {
+      if (requestId !== inlineResumeRequestSeq) return;
+      if (!isRetry) {
+        setTimeout(function () {
+          if (requestId === inlineResumeRequestSeq) loadInlineResume(professionalId, true);
+        }, 800);
+        return;
+      }
+      docxEl.innerHTML = '<div class="docx-error">' + esc(message || 'Could not load resume.') + '</div>';
+    }
+
     apiFetch('/api/recruiters/matches/' + professionalId + '/resume-url' + recCompanyOverrideParam(), { headers: authHeaders() })
       .then(parseJson)
       .then(function (result) {
-        if (state.threadForId !== professionalId) return; // selection moved on before this resolved
-        if (!result.ok) {
-          docxEl.innerHTML = '<div class="docx-error">' + esc(result.data.error || 'Could not load resume.') + '</div>';
-          return;
-        }
+        if (requestId !== inlineResumeRequestSeq) return;
+        if (!result.ok) { handleFailure(result.data.error); return; }
         renderResumeInto(frameEl, docxEl, result.data.url, result.data.contentType);
       })
-      .catch(function () {
-        if (state.threadForId !== professionalId) return;
-        docxEl.innerHTML = '<div class="docx-error">Could not load resume.</div>';
-      });
+      .catch(function () { handleFailure(); });
   }
 
   function renderMessageList() {

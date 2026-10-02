@@ -407,10 +407,16 @@ main.view { flex: 1; }
 .match-row-name span:first-child { font-weight: 600; }
 .match-row-sub { font-size: 14px; color: var(--muted-soft); }
 .match-contacted { flex: none; font-size: 12px; color: var(--success-text); }
+.match-has-resume {
+  flex: none; display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; color: var(--muted); padding: 3px 9px; border-radius: 999px; background: var(--subtle-fill-2);
+}
+.match-has-resume-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
 
 .detail-panel {
   flex: 2 1 460px; min-width: 0; background: var(--surface); border: 1px solid var(--border);
   border-radius: 20px; padding: 32px; display: flex; flex-direction: column; gap: 24px;
+  position: sticky; top: 24px; max-height: calc(100vh - 48px); overflow-y: auto;
 }
 .detail-top { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
 .detail-avatar { width: 64px; height: 64px; font-size: 28px; }
@@ -497,4 +503,5 @@ main.view { flex: 1; }
 
 @media (max-width: 720px) {
   .results-body { flex-direction: column; }
+  .detail-panel { position: static; max-height: none; }
 }
