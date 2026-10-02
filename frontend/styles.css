@@ -335,6 +335,9 @@ main.view { flex: 1; }
   border-radius: 10px; background: var(--surface); color: var(--ink);
 }
 
+.rec-search-row { margin: 20px 0; }
+.rec-search-input { width: 100%; max-width: 480px; }
+
 .preview-col { position: sticky; top: 24px; display: flex; flex-direction: column; gap: 16px; }
 .preview-chips-wrap { display: flex; flex-direction: column; gap: 10px; }
 .preview-chips { display: flex; flex-wrap: wrap; gap: 8px; }

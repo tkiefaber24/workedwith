@@ -7,6 +7,7 @@ from flask_cors import CORS
 from auth import parse_work_email, get_bearer_token
 from supabase_client import get_supabase
 from storage import ALLOWED_RESUME_MIME, MAX_RESUME_BYTES, upload_resume, signed_resume_url, delete_resume
+from resume_text import extract_resume_text
 import os
 
 load_dotenv()
@@ -132,6 +133,7 @@ def recruiter_matches():
     if not rec:
         return jsonify({"error": "Not a verified recruiter yet."}), 404
     company = effective_company(rec, request.args.get("company"))
+    search_terms = (request.args.get("q") or "").strip().lower().split()
 
     clients = sb.table("professional_clients").select("professional_id, company") \
         .ilike("company", company.strip()).execute().data
@@ -157,6 +159,13 @@ def recruiter_matches():
             p = by_id.get(pid)
             if not p:
                 continue
+            if search_terms:
+                haystack = " ".join([
+                    p.get("name") or "", p.get("employer") or "", p.get("title") or "",
+                    p.get("description") or "", p.get("resume_text") or "",
+                ]).lower()
+                if not all(term in haystack for term in search_terms):
+                    continue
             matches.append({
                 "id": p["id"], "name": p["name"], "employer": p["employer"],
                 "title": p["title"], "desc": p["description"],
@@ -366,12 +375,14 @@ def professional_upload_resume():
 
     extension = ALLOWED_RESUME_MIME[content_type]
     path = upload_resume(row["id"], file_bytes, content_type, extension)
+    resume_text = extract_resume_text(file_bytes, content_type)
 
     sb = get_supabase()
     sb.table("professionals").update({
         "resume_path": path,
         "resume_filename": file.filename or f"resume.{extension}",
         "resume_content_type": content_type,
+        "resume_text": resume_text,
     }).eq("id", row["id"]).execute()
     row = sb.table("professionals").select("*").eq("id", row["id"]).single().execute().data
 

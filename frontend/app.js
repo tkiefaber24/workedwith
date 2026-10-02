@@ -50,7 +50,7 @@
     candidateLoggedIn: false, candidateStage: 'password', candidateEmail: '',
     newCo: '', previewIdx: 0,
     email: '', recStage: 'password', recHasPassword: false,
-    recCompany: null, recCompanyOptions: null, selectedId: null, matches: [],
+    recCompany: null, recCompanyOptions: null, recSearchQuery: '', selectedId: null, matches: [],
     threadForId: null, threadMessages: [],
     conversations: [], convSelectedId: null, convThreadForId: null, convThreadMessages: [],
     passwordSetupDismissedCand: false, passwordSetupDismissedRec: false,
@@ -86,7 +86,7 @@
     'rec-signup-email', 'rec-signup-password', 'rec-signup-error', 'rec-signup-btn', 'rec-signup-back-to-password-btn',
     'rec-email', 'email-error', 'verify-btn', 'rec-back-to-password-btn',
     'rec-sent-email', 'back-to-email-btn',
-    'results-heading', 'results-count', 'results-email', 'sign-out-btn', 'rec-company-switcher',
+    'results-heading', 'results-count', 'results-email', 'sign-out-btn', 'rec-company-switcher', 'rec-search-input',
     'recruiter-account-menu', 'recruiter-account-trigger', 'recruiter-account-dropdown',
     'recruiter-delete-account-btn', 'recruiter-delete-confirm', 'recruiter-delete-confirm-btn', 'recruiter-delete-cancel-btn',
     'rec-password-setup', 'rec-new-password', 'rec-save-password-btn', 'rec-skip-password-btn', 'rec-password-error',
@@ -1038,11 +1038,18 @@
     loadAndRenderResults();
   }
 
+  function matchesQueryString() {
+    var params = [];
+    if (state.recCompanyOptions) params.push('company=' + encodeURIComponent(state.recCompany));
+    if (state.recSearchQuery) params.push('q=' + encodeURIComponent(state.recSearchQuery));
+    return params.length ? '?' + params.join('&') : '';
+  }
+
   function loadAndRenderResults() {
     el.resultsHeading.textContent = 'People who work with ' + state.recCompany;
     el.resultsEmail.textContent = state.email;
     renderRecCompanySwitcher();
-    apiFetch('/api/recruiters/matches' + recCompanyOverrideParam(), { headers: authHeaders() })
+    apiFetch('/api/recruiters/matches' + matchesQueryString(), { headers: authHeaders() })
       .then(parseJson)
       .then(function (result) {
         state.matches = result.ok ? result.data.matches : [];
@@ -1055,15 +1062,31 @@
       });
   }
 
+  var recSearchDebounce = null;
+  el.recSearchInput.addEventListener('input', function () {
+    state.recSearchQuery = el.recSearchInput.value.trim();
+    clearTimeout(recSearchDebounce);
+    recSearchDebounce = setTimeout(function () {
+      state.selectedId = null;
+      state.threadForId = null;
+      state.threadMessages = [];
+      loadAndRenderResults();
+    }, 350);
+  });
+
   function renderResultsBody() {
     var matches = state.matches;
     var recCompany = state.recCompany;
     var selId = state.selectedId && matches.some(function (m) { return m.id === state.selectedId; }) ? state.selectedId : (matches[0] ? matches[0].id : null);
 
-    el.resultsCount.textContent = matches.length + ' ' + (matches.length === 1 ? 'person lists' : 'people list') + ' ' + recCompany + ' as a company they work with.';
+    var searchSuffix = state.recSearchQuery ? ' matching “' + state.recSearchQuery + '”' : '';
+    el.resultsCount.textContent = matches.length + ' ' + (matches.length === 1 ? 'person lists' : 'people list') + ' ' + recCompany + ' as a company they work with' + searchSuffix + '.';
 
     if (matches.length === 0) {
-      el.matchesList.innerHTML = '<div class="empty-state" style="border:1px dashed var(--dashed-border);border-radius:14px;padding:28px;text-align:left">No one has listed ' + esc(recCompany) + ' yet.</div>';
+      var emptyMsg = state.recSearchQuery
+        ? 'No one matching “' + esc(state.recSearchQuery) + '” lists ' + esc(recCompany) + '.'
+        : 'No one has listed ' + esc(recCompany) + ' yet.';
+      el.matchesList.innerHTML = '<div class="empty-state" style="border:1px dashed var(--dashed-border);border-radius:14px;padding:28px;text-align:left">' + emptyMsg + '</div>';
     } else {
       el.matchesList.innerHTML = matches.map(function (p) {
         var active = p.id === selId;
@@ -1230,6 +1253,8 @@
     state.previewIdx = 0;
     state.recCompany = null;
     state.recCompanyOptions = null;
+    state.recSearchQuery = '';
+    el.recSearchInput.value = '';
     state.email = '';
     state.recStage = 'password';
     state.recHasPassword = false;
@@ -1293,6 +1318,8 @@
       state.candidateLoggedIn = false;
       state.recCompany = null;
       state.recCompanyOptions = null;
+      state.recSearchQuery = '';
+      el.recSearchInput.value = '';
       state.email = '';
       state.recHasPassword = false;
       state.selectedId = null;
