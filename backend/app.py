@@ -87,6 +87,13 @@ def recruiter_finalize():
         return jsonify({"error": str(e)}), 400
 
     sb = get_supabase()
+    is_new = not sb.table("recruiters").select("id").eq("user_id", user.id).execute().data
+    if is_new and sb.table("professionals").select("id").eq("user_id", user.id).execute().data:
+        # This identity already has a professional profile -- the two roles
+        # must never share a login. Only blocks *creating* a new recruiter
+        # row; an existing recruiter re-verifying on every visit is untouched.
+        return jsonify({"error": "This email is already registered as a professional. Use a different email to create a recruiter account."}), 409
+
     payload = {
         "user_id": user.id, "email": email, "domain": domain,
         "company": company, "verified_at": now_iso(),
@@ -271,12 +278,16 @@ def professional_json(row):
     }
 
 
-def get_or_create_professional(user, has_password=False):
-    sb = get_supabase()
-    existing = sb.table("professionals").select("*").eq("user_id", user.id).execute().data
-    if existing:
-        return existing[0]
-    inserted = sb.table("professionals").insert({
+def get_professional(user):
+    """Fetches this user's professional row if they have one. Never creates
+    one -- merely being signed in (possibly as a recruiter, under the same
+    Supabase login) must never silently enroll someone as a professional."""
+    existing = get_supabase().table("professionals").select("*").eq("user_id", user.id).execute().data
+    return existing[0] if existing else None
+
+
+def create_professional(user, has_password=False):
+    inserted = get_supabase().table("professionals").insert({
         "user_id": user.id, "email": user.email,
         "name": "", "employer": "", "title": "", "description": "",
         "has_password": bool(has_password),
@@ -289,10 +300,26 @@ def professional_me():
     user = get_current_user(request)
     if not user:
         return jsonify({"error": "Unauthorized"}), 401
-    # justSetPassword: the frontend sets this right after a signup-with-password flow,
-    # so the row is created with has_password already true instead of a separate
-    # follow-up call racing against a row that doesn't exist yet.
-    row = get_or_create_professional(user, has_password=request.args.get("justSetPassword") == "1")
+    row = get_professional(user)
+    if row:
+        return jsonify(professional_json(row))
+
+    # No professional profile yet. justSetPassword is the frontend's signal
+    # that this call is the direct continuation of an explicit signup (set a
+    # password, confirm the email) -- never create one just because someone
+    # authenticated (possibly for a recruiter account) happened to visit this
+    # tab.
+    if request.args.get("justSetPassword") != "1":
+        return jsonify({"error": "Not a registered professional yet."}), 404
+
+    # A recruiter account already exists under this same email/login -- the
+    # two roles must never share one. The frontend sends people here by
+    # typing a professional-signup email, so in practice this only fires if
+    # they reused their recruiter email.
+    if get_supabase().table("recruiters").select("id").eq("user_id", user.id).execute().data:
+        return jsonify({"error": "This email is already registered as a recruiter. Use a different email to create a professional profile."}), 409
+
+    row = create_professional(user, has_password=True)
     return jsonify(professional_json(row))
 
 
@@ -301,7 +328,9 @@ def professional_update():
     user = get_current_user(request)
     if not user:
         return jsonify({"error": "Unauthorized"}), 401
-    row = get_or_create_professional(user)
+    row = get_professional(user)
+    if not row:
+        return jsonify({"error": "Not a registered professional yet."}), 404
 
     body = request.get_json(silent=True) or {}
     fields = {}
@@ -324,7 +353,9 @@ def professional_add_client():
     user = get_current_user(request)
     if not user:
         return jsonify({"error": "Unauthorized"}), 401
-    row = get_or_create_professional(user)
+    row = get_professional(user)
+    if not row:
+        return jsonify({"error": "Not a registered professional yet."}), 404
 
     body = request.get_json(silent=True) or {}
     company = (body.get("company") or "").strip()
@@ -347,7 +378,9 @@ def professional_remove_client(client_id):
     user = get_current_user(request)
     if not user:
         return jsonify({"error": "Unauthorized"}), 401
-    row = get_or_create_professional(user)
+    row = get_professional(user)
+    if not row:
+        return jsonify({"error": "Not a registered professional yet."}), 404
 
     get_supabase().table("professional_clients").delete() \
         .eq("id", client_id).eq("professional_id", row["id"]).execute()
@@ -360,7 +393,9 @@ def professional_upload_resume():
     user = get_current_user(request)
     if not user:
         return jsonify({"error": "Unauthorized"}), 401
-    row = get_or_create_professional(user)
+    row = get_professional(user)
+    if not row:
+        return jsonify({"error": "Not a registered professional yet."}), 404
 
     if "resume" not in request.files:
         return jsonify({"error": "No resume file provided."}), 400
@@ -394,7 +429,9 @@ def professional_resume_url():
     user = get_current_user(request)
     if not user:
         return jsonify({"error": "Unauthorized"}), 401
-    row = get_or_create_professional(user)
+    row = get_professional(user)
+    if not row:
+        return jsonify({"error": "Not a registered professional yet."}), 404
     if not row.get("resume_path"):
         return jsonify({"error": "No resume uploaded yet."}), 404
     return jsonify({
@@ -408,7 +445,9 @@ def professional_conversations():
     user = get_current_user(request)
     if not user:
         return jsonify({"error": "Unauthorized"}), 401
-    row = get_or_create_professional(user)
+    row = get_professional(user)
+    if not row:
+        return jsonify({"error": "Not a registered professional yet."}), 404
     sb = get_supabase()
 
     msgs = sb.table("messages").select("recruiter_id, sender, body, created_at") \
@@ -441,7 +480,9 @@ def professional_thread_messages(recruiter_id):
     user = get_current_user(request)
     if not user:
         return jsonify({"error": "Unauthorized"}), 401
-    row = get_or_create_professional(user)
+    row = get_professional(user)
+    if not row:
+        return jsonify({"error": "Not a registered professional yet."}), 404
 
     rows = get_supabase().table("messages").select("*") \
         .eq("professional_id", row["id"]).eq("recruiter_id", recruiter_id) \
@@ -456,7 +497,9 @@ def professional_send_message(recruiter_id):
     user = get_current_user(request)
     if not user:
         return jsonify({"error": "Unauthorized"}), 401
-    row = get_or_create_professional(user)
+    row = get_professional(user)
+    if not row:
+        return jsonify({"error": "Not a registered professional yet."}), 404
     sb = get_supabase()
 
     # A professional can only reply to a recruiter who has already reached out --
