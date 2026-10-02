@@ -1147,7 +1147,13 @@
         '</div>' +
       '</div>';
 
-    if (selP.hasResume && isNewSelection) loadInlineResume(selP.id);
+    // Always (re)load, not just on a new selection -- renderResultsBody rebuilds
+    // the whole detail panel (including a fresh, un-loaded iframe/docx container)
+    // on every call, including re-renders triggered by unrelated state changes
+    // elsewhere in the app. Gating this on isNewSelection left the resume
+    // permanently blank after any such re-render while the same person stayed
+    // selected, since the fresh DOM never got told to load anything into it.
+    if (selP.hasResume) loadInlineResume(selP.id);
     renderMessageList();
     document.getElementById('message-send-btn').addEventListener('click', function () { sendMessage(selP.id); });
     document.getElementById('message-input').addEventListener('keydown', function (e) {
