@@ -480,6 +480,7 @@ main.view { flex: 1; }
   color: var(--muted); text-align: center; padding: 0 24px;
 }
 .resume-modal-docx .docx-wrapper, .inline-resume-docx .docx-wrapper { background: none; }
+.pdf-page-canvas { display: block; width: 100%; height: auto; margin-bottom: 16px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.2); }
 
 /* Password-setup nudge card */
 .password-setup-card {

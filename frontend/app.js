@@ -293,6 +293,59 @@
   // client-side with docx-preview, since third-party doc viewers are unreliable
   // with short-lived signed URLs and often fall back to a forced download) ----
   var docxLibPromise = null;
+  var pdfLibPromise = null;
+  function loadPdfLib() {
+    if (pdfLibPromise) return pdfLibPromise;
+    pdfLibPromise = new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.min.js';
+      s.onload = function () {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+          'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.worker.min.js';
+        resolve();
+      };
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+    return pdfLibPromise;
+  }
+
+  // Renders every page of the PDF as a canvas scaled to the container's width,
+  // the same "clean page, no browser chrome" look as the docx preview below --
+  // rather than handing the PDF to the browser's own native viewer (toolbar,
+  // thumbnail rail, and an arbitrary default zoom) via an iframe.
+  function renderPdfInto(container, url) {
+    loadPdfLib()
+      .then(function () { return window.pdfjsLib.getDocument(url).promise; })
+      .then(function (pdfDoc) {
+        container.innerHTML = '';
+        var style = window.getComputedStyle(container);
+        var paddingX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+        var targetWidth = container.clientWidth - paddingX;
+        var chain = Promise.resolve();
+        var renderPage = function (pageNum) {
+          return pdfDoc.getPage(pageNum).then(function (page) {
+            var baseViewport = page.getViewport({ scale: 1 });
+            var viewport = page.getViewport({ scale: targetWidth / baseViewport.width });
+            var canvas = document.createElement('canvas');
+            canvas.className = 'pdf-page-canvas';
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            container.appendChild(canvas);
+            return page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise;
+          });
+        };
+        for (var i = 1; i <= pdfDoc.numPages; i++) {
+          (function (pageNum) { chain = chain.then(function () { return renderPage(pageNum); }); })(i);
+        }
+        return chain;
+      })
+      .catch(function () {
+        container.innerHTML = '<div class="docx-error">Couldn’t preview this document. ' +
+          '<a href="' + esc(url) + '" target="_blank" rel="noopener">Open it in a new tab</a> instead.</div>';
+      });
+  }
+
   function loadDocxPreviewLib() {
     if (docxLibPromise) return docxLibPromise;
     docxLibPromise = new Promise(function (resolve, reject) {
@@ -345,20 +398,18 @@
 
   // Shared by the candidate's own resume modal and the recruiter's inline
   // preview: fetches a signed resume URL into whichever frame/container pair
-  // it's given.
+  // it's given. frameEl is unused now (both PDFs and Word docs render into
+  // docxEl) but kept so existing callers don't need to change.
   function renderResumeInto(frameEl, docxEl, url, contentType) {
-    if (contentType === 'application/pdf') {
-      docxEl.hidden = true;
-      docxEl.innerHTML = '';
-      frameEl.hidden = false;
-      frameEl.src = url;
-      return;
-    }
-
     frameEl.hidden = true;
     frameEl.src = 'about:blank';
     docxEl.hidden = false;
     docxEl.innerHTML = '<div class="docx-loading">Loading preview…</div>';
+
+    if (contentType === 'application/pdf') {
+      renderPdfInto(docxEl, url);
+      return;
+    }
 
     loadDocxPreviewLib()
       .then(function () { return fetch(url); })
